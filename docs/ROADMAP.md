@@ -16,6 +16,10 @@
 - [x] Node capacity reservation API with serialized overcommit checks, configurable overhead, expiry and idempotency
 - [ ] Automated node enrollment/rotation
 - [ ] Connect reservations to customer server creation and server lifecycle transitions
+- [x] Durable idempotent server-operation queue schema for software and utility actions
+- [ ] Customer server creation API with entitlement/quota enforcement and reservation consumption
+- [ ] Provisioning outbox dispatcher and secure node-agent job protocol
+- [ ] Operation worker, retries, cancellation and reconciliation
 - [ ] Docker provisioning with per-server isolation and strict resource limits
 - [ ] Server lifecycle state machine and reconciliation worker
 - [ ] Port allocation and firewall integration
@@ -26,8 +30,15 @@
 ## Customer and admin experience
 - [ ] Customer server list and server detail views backed by API
 - [ ] Admin node, allocation, user and server management
-- [ ] Plan catalogue and quota enforcement
-- [ ] Plugin/modpack/software installation workflows
+- [x] Database-backed plan catalogue and customer entitlement read APIs
+- [ ] Admin plan CRUD UI and plan purchase/renewal flow
+- [ ] Enforce entitlement quotas during server creation
+- [ ] Minecraft software/version catalogue and compatibility resolver
+- [ ] Plugin installer with trusted provider metadata and checksums
+- [ ] Mod installer for Fabric/Forge/NeoForge with dependency checks
+- [ ] Modpack installer with pinned manifests and rollback
+- [ ] Server utilities: properties, EULA, Java/runtime, schedules, backups, logs, ports and diagnostics
+- [ ] Customer-facing operation history and progress UI
 
 ## Billing and security
 - [ ] FamGateway webhook signature verification and payment reconciliation

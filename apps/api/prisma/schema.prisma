@@ -44,6 +44,28 @@ enum PlanEntitlementStatus {
   CANCELLED
 }
 
+enum ServerOperationType {
+  INSTALL_PLUGIN
+  INSTALL_MOD
+  INSTALL_MODPACK
+  CHANGE_VERSION
+  RESTART
+  STOP
+  START
+  REINSTALL
+  CREATE_BACKUP
+  RESTORE_BACKUP
+  UPDATE_PROPERTIES
+}
+
+enum ServerOperationStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
 model User {
   id                  String        @id @default(cuid())
   email               String        @unique
@@ -64,6 +86,7 @@ model User {
   emailNotifications  EmailNotification[]
   notificationPreference NotificationPreference?
   planEntitlements    UserPlanEntitlement[]
+  serverOperations    MinecraftServerOperation[]
 }
 
 model EmailVerificationCode {
@@ -233,7 +256,28 @@ model MinecraftServer {
   createdAt  DateTime     @default(now())
   owner      User         @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   node       MinecraftNode? @relation(fields: [nodeId], references: [id], onDelete: SetNull)
+  operations MinecraftServerOperation[]
   @@index([ownerId, createdAt])
+}
+
+model MinecraftServerOperation {
+  id             String @id @default(cuid())
+  serverId       String
+  actorUserId    String
+  type           ServerOperationType
+  status         ServerOperationStatus @default(QUEUED)
+  idempotencyKey String @unique
+  payload        Json
+  result         Json?
+  errorCode      String?
+  errorMessage   String?
+  createdAt      DateTime @default(now())
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  server         MinecraftServer @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  actor          User @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+  @@index([serverId, createdAt])
+  @@index([status, createdAt])
 }
 model AuditLog {
   id          String   @id @default(cuid())

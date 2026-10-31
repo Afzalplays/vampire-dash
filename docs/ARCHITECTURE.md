@@ -18,3 +18,8 @@ All ownership, roles, quotas, billing and server lifecycle decisions are enforce
 4. Node enrollment, Docker isolation, quotas and server lifecycle.
 5. Console, files, backups, plugins and player operations.
 6. Monitoring, recovery tests, deployment hardening and installer release.
+
+
+## Server operations and software management
+
+Server actions are represented by durable `MinecraftServerOperation` records. Each operation has an owner, server, typed operation, idempotency key, JSON payload/result, status and timestamps. The schema is a queue foundation; it does not execute commands. A separate dispatcher and authenticated node-agent job protocol must validate ownership, server state, operation-specific payloads and artifact provenance before any operation can run. Never let a customer-supplied payload become a host shell command.
