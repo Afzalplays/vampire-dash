@@ -44,6 +44,31 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       throw error;
     }
   });
+  app.get("/software/releases", async (request, reply) => {
+    const admin = await requireAdmin(request, reply); if (!admin) return;
+    const releases = await prisma.minecraftSoftwareRelease.findMany({
+      select: { id: true, software: true, minecraftVersion: true, softwareVersion: true, javaMajor: true, dockerImage: true, downloadUrl: true, checksumSha256: true, recommended: true, enabled: true, createdAt: true, updatedAt: true },
+      orderBy: [{ enabled: "desc" }, { software: "asc" }, { minecraftVersion: "desc" }, { softwareVersion: "desc" }],
+      take: 500,
+    });
+    return { releases };
+  });
+  app.patch("/software/releases/:releaseId", async (request, reply) => {
+    const admin = await requireAdmin(request, reply); if (!admin) return;
+    const params = z.object({ releaseId: z.string().min(1).max(128) }).safeParse(request.params);
+    const body = z.object({ enabled: z.boolean().optional(), recommended: z.boolean().optional() }).strict()
+      .refine((value) => value.enabled !== undefined || value.recommended !== undefined, "At least one field is required")
+      .safeParse(request.body);
+    if (!params.success || !body.success) return reply.code(400).send({ error: "Invalid software release update" });
+    const existing = await prisma.minecraftSoftwareRelease.findUnique({ where: { id: params.data.releaseId } });
+    if (!existing) return reply.code(404).send({ error: "Software release not found" });
+    const release = await prisma.minecraftSoftwareRelease.update({ where: { id: existing.id }, data: body.data });
+    await prisma.auditLog.create({ data: {
+      actorUserId: admin.id, action: "SOFTWARE_RELEASE_UPDATED", targetId: release.id,
+      details: `Updated ${release.software} ${release.softwareVersion} for Minecraft ${release.minecraftVersion}; enabled=${release.enabled}; recommended=${release.recommended}`,
+    } });
+    return { release };
+  });
   app.get("/users", async (request, reply) => {
     const admin = await requireAdmin(request, reply); if (!admin) return;
     const users = await prisma.user.findMany({ select: { id: true, email: true, username: true, role: true, status: true, createdAt: true }, orderBy: { createdAt: "desc" }, take: 100 });
