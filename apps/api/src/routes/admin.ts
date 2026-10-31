@@ -117,6 +117,14 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
           nodeId: node.id, memoryMb: body.data.memoryMb, diskMb: body.data.diskMb,
           idempotencyKey: body.data.idempotencyKey, expiresAt: new Date(Date.now() + 15 * 60 * 1000),
         } });
+        const totals = await tx.nodeCapacityReservation.aggregate({
+          where: { nodeId: node.id, status: "ACTIVE", expiresAt: { gt: new Date() } },
+          _sum: { memoryMb: true, diskMb: true },
+        });
+        await tx.minecraftNode.update({ where: { id: node.id }, data: {
+          reservedMemoryMb: totals._sum.memoryMb ?? 0,
+          reservedDiskMb: totals._sum.diskMb ?? 0,
+        } });
         await tx.auditLog.create({ data: { actorUserId: admin.id, action: "NODE_CAPACITY_RESERVED", targetId: created.id, details: `Reserved ${created.memoryMb} MiB RAM and ${created.diskMb} MiB disk on node ${node.id}; expires in 15 minutes` } });
         return created;
       }, { isolationLevel: "Serializable", maxWait: 10000, timeout: 15000 });
@@ -134,12 +142,30 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     const admin = await requireAdmin(request, reply); if (!admin) return;
     const params = z.object({ nodeId: z.string().min(1), reservationId: z.string().min(1) }).safeParse(request.params);
     if (!params.success) return reply.code(400).send({ error: "Invalid reservation reference" });
-    const changed = await prisma.nodeCapacityReservation.updateMany({
-      where: { id: params.data.reservationId, nodeId: params.data.nodeId, status: "ACTIVE" },
-      data: { status: "RELEASED" },
-    });
-    if (!changed.count) return reply.code(404).send({ error: "Active reservation not found" });
-    await prisma.auditLog.create({ data: { actorUserId: admin.id, action: "NODE_CAPACITY_RELEASED", targetId: params.data.reservationId, details: `Released capacity reservation ${params.data.reservationId}` } });
+    const released = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "MinecraftNode" WHERE "id" = ${params.data.nodeId} FOR UPDATE`;
+      const changed = await tx.nodeCapacityReservation.updateMany({
+        where: { id: params.data.reservationId, nodeId: params.data.nodeId, status: "ACTIVE" },
+        data: { status: "RELEASED" },
+      });
+      if (!changed.count) return false;
+      const now = new Date();
+      await tx.nodeCapacityReservation.updateMany({
+        where: { nodeId: params.data.nodeId, status: "ACTIVE", expiresAt: { lte: now } },
+        data: { status: "EXPIRED" },
+      });
+      const totals = await tx.nodeCapacityReservation.aggregate({
+        where: { nodeId: params.data.nodeId, status: "ACTIVE", expiresAt: { gt: now } },
+        _sum: { memoryMb: true, diskMb: true },
+      });
+      await tx.minecraftNode.update({ where: { id: params.data.nodeId }, data: {
+        reservedMemoryMb: totals._sum.memoryMb ?? 0,
+        reservedDiskMb: totals._sum.diskMb ?? 0,
+      } });
+      await tx.auditLog.create({ data: { actorUserId: admin.id, action: "NODE_CAPACITY_RELEASED", targetId: params.data.reservationId, details: `Released capacity reservation ${params.data.reservationId}` } });
+      return true;
+    }, { isolationLevel: "Serializable", maxWait: 10000, timeout: 15000 });
+    if (!released) return reply.code(404).send({ error: "Active reservation not found" });
     return { ok: true, status: "RELEASED" };
   });
   app.post("/nodes/:nodeId/disable", async (request, reply) => {
