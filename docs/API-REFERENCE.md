@@ -1,25 +1,17 @@
-# API reference (starter)
+# API reference
 
-Development base URL: http://127.0.0.1:4000/api. Cookie-authenticated endpoints require the browser to send credentials.
-
-## Health
-- GET /health — process health.
-- GET /health/ready — database readiness.
+Base path: `/api`.
 
 ## Authentication
-- POST /auth/register — email, username and password; creates USER role only.
-- POST /auth/login — email and password; sets an HttpOnly session cookie.
-- GET /auth/me — current user.
-- POST /auth/logout — revokes the current session.
+- `POST /auth/register` — create an unverified account and send a 6-digit email OTP.
+- `POST /auth/verify-email` — verify `{ "email": "...", "otp": "123456" }`; issues the session cookie after success.
+- `POST /auth/resend-verification` — request another code for `{ "email": "..." }`.
+- `POST /auth/login` — sign in; unverified accounts are rejected.
+- `GET /auth/me` — current session.
+- `POST /auth/logout` — revoke current session.
 
-## Billing (development only)
-- POST /billing/orders — authenticated; amountPaise and provider (defaults to famgateway).
-- POST /billing/orders/:orderId/verify — authenticated server-to-server verification; wallet credit is performed only after provider verification and amount/currency match.
+## Email preferences
+- `GET /notifications/preferences` — read current user's email alert preferences.
+- `PATCH /notifications/preferences` — update any of `emailEnabled`, `serverAlerts`, `billingAlerts`, `securityAlerts`.
 
-## Admin
-- GET /admin/users — admin only.
-- GET /admin/payment-providers — admin only.
-- POST /admin/users/:userId/wallet-adjustment — admin only; amountPaise and reason, recorded in the ledger and audit log.
-
-## Important limitations
-The webhook endpoint, raw-body signature verification, CSRF protection, MFA, OAuth, email verification and production security tests are not complete. Billing endpoints are not approved for live payments. Never expose this starter API publicly.
+Email event templates are documented in [EMAIL-NOTIFICATIONS.md](EMAIL-NOTIFICATIONS.md). SMTP credentials must remain in the API environment.
