@@ -10,6 +10,7 @@ import { authRoutes } from "./routes/auth.js";
 import { billingRoutes } from "./routes/billing.js";
 import { adminRoutes } from "./routes/admin.js";
 import { notificationRoutes } from "./routes/notifications.js";
+import { planRoutes } from "./routes/plans.js";
 
 const app = Fastify({ logger: true, trustProxy: false, bodyLimit: 1024 * 1024 });
 await app.register(helmet);
@@ -22,6 +23,7 @@ await app.register(authRoutes, { prefix: "/api/auth" });
 await app.register(billingRoutes, { prefix: "/api/billing" });
 await app.register(adminRoutes, { prefix: "/api/admin" });
 await app.register(notificationRoutes, { prefix: "/api/notifications" });
+await app.register(planRoutes, { prefix: "/api/plans" });
 
 app.setErrorHandler((error, request, reply) => {
   request.log.error(error);
