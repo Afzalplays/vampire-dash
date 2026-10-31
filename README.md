@@ -36,6 +36,9 @@ Web: http://localhost:3000 · API: http://127.0.0.1:4000/api/health
 ## Documentation
 - Installation: docs/INSTALLATION.md · Configuration: docs/CONFIGURATION.md
 - Architecture: docs/ARCHITECTURE.md · Database: docs/DATABASE.md
+- Plugins/software: docs/PLUGINS-AND-SOFTWARE.md · Plans/quotas: docs/PLANS-AND-QUOTAS.md
+- Deployment: docs/DEPLOYMENT.md · Operations: docs/OPERATIONS.md
+- Roadmap: docs/ROADMAP.md
 - Authentication: docs/AUTHENTICATION.md · API reference: docs/API-REFERENCE.md
 - Billing gateways: docs/BILLING-GATEWAYS.md · FamGateway: docs/BILLING-FAMGATEWAY.md
 - Security: docs/SECURITY.md · Node agent: docs/NODE-AGENT.md
