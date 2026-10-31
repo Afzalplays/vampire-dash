@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { z } from "zod";
+
 const schema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   API_HOST: z.string().default("127.0.0.1"),
@@ -15,4 +16,12 @@ const schema = z.object({
   SMTP_PASSWORD: z.string().default(""),
   SMTP_FROM: z.string().default(""),
 });
-export const env = schema.parse(process.env);
+
+export const env = schema.superRefine((value, ctx) => {
+  if (value.NODE_ENV === "production" && !value.WEB_ORIGIN.startsWith("https://")) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["WEB_ORIGIN"], message: "Production WEB_ORIGIN must use HTTPS" });
+  }
+  if (value.NODE_ENV === "production" && !value.COOKIE_SECURE) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["COOKIE_SECURE"], message: "COOKIE_SECURE=true is mandatory in production" });
+  }
+}).parse(process.env);
