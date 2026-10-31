@@ -6,11 +6,12 @@
 - [x] Email OTP verification foundation
 - [x] SMTP notification templates and expiry reminder worker
 - [x] Go node-agent liveness and authenticated identity foundation
+- [x] Node-agent read-only host CPU, memory and data-filesystem capacity endpoint (mTLS + bearer token)
 
 ## Core platform
 - [x] Admin node registration, one-time bearer-token issuance, audit logging and disable endpoint (mTLS enrollment/rotation still pending)
 - [ ] Panel-side mTLS enrollment, credential rotation and health persistence
-- [ ] Node telemetry: CPU, memory, disk and Docker capacity
+- [ ] Docker capacity accounting and reservation-safe scheduling
 - [ ] Docker provisioning with per-server isolation and strict resource limits
 - [ ] Server lifecycle state machine and reconciliation worker
 - [ ] Port allocation and firewall integration

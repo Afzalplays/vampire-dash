@@ -1,8 +1,9 @@
 # Vampire Dash Node Agent
 
 The node agent is a separate Go service installed on each Minecraft compute node.
-It currently provides a secure HTTPS/mTLS connectivity foundation. It does not
-create containers, mount customer files, or expose Docker.
+It currently provides secure HTTPS/mTLS connectivity, authenticated status and
+read-only host capacity telemetry. It does not create containers, mount customer
+files, or expose Docker.
 
 ## Security controls
 
@@ -11,8 +12,8 @@ create containers, mount customer files, or expose Docker.
 - Mutual TLS is mandatory: the agent verifies a client certificate issued by
   the configured panel-client CA.
 - The panel must verify the agent certificate against its trusted node-agent CA.
-- The status endpoint also requires a unique per-node bearer token, compared in
-  constant time.
+- Status and metrics endpoints also require a unique per-node bearer token,
+  compared in constant time.
 - HTTP read/write/idle timeouts and bounded request headers.
 - No-store and nosniff response headers.
 - Graceful shutdown on SIGINT/SIGTERM.
@@ -23,9 +24,9 @@ Use a dedicated private CA for node-agent server certificates and a separate
 client certificate issued to the panel API. Keep CA private keys offline or in
 a managed secrets system. Deploy only CA public certificates to the services.
 Issue a unique server certificate for each node with its DNS name in the SAN.
-Protect the node private key and panel client private key with root-only access.
+Protect node and panel private keys with root-only access.
 
-The agent requires these environment variables:
+## Configuration
 
 | Variable | Purpose |
 |---|---|
@@ -35,6 +36,7 @@ The agent requires these environment variables:
 | `AGENT_TLS_CERT` | Agent HTTPS certificate PEM |
 | `AGENT_TLS_KEY` | Agent private key PEM |
 | `AGENT_CLIENT_CA` | CA PEM used to verify panel client certificates |
+| `AGENT_DATA_DIR` | Filesystem path whose disk capacity is reported; defaults to `/` |
 
 ## Build and run
 
@@ -49,6 +51,7 @@ export AGENT_TOKEN="$(openssl rand -hex 32)"
 export AGENT_TLS_CERT=/etc/vampire-node-agent/pki/agent.crt
 export AGENT_TLS_KEY=/etc/vampire-node-agent/pki/agent.key
 export AGENT_CLIENT_CA=/etc/vampire-node-agent/pki/panel-client-ca.crt
+export AGENT_DATA_DIR=/var/lib/vampire-dash/servers
 go test ./...
 go vet ./...
 go build -o vampire-node-agent .
@@ -57,10 +60,19 @@ go build -o vampire-node-agent .
 
 ## Endpoints
 
-| Method | Path | Transport security | Application auth |
+All endpoints require HTTPS and a valid panel client certificate at the TLS
+layer. Status and metrics additionally require the bearer token.
+
+| Method | Path | Application auth | Response |
 |---|---|---|---|
-| GET | `/health` | HTTPS + valid panel client certificate | None |
-| GET | `/v1/node/status` | HTTPS + valid panel client certificate | Bearer token |
+| GET | `/health` | mTLS only | Agent liveness/version |
+| GET | `/v1/node/status` | mTLS + bearer | Node identity and agent version |
+| GET | `/v1/node/metrics` | mTLS + bearer | CPU core count, host memory and configured data filesystem capacity |
+
+Metrics are read-only snapshots. Memory values come from Linux `/proc/meminfo`;
+disk values come from `statfs(AGENT_DATA_DIR)`. They are host-level capacity
+values, not Docker quota accounting or per-container usage. The panel must not
+treat them as a reservation guarantee.
 
 Example from the panel API host (client certificate and CA are mandatory):
 
@@ -69,7 +81,7 @@ curl --cacert /etc/vampire-panel/pki/node-agent-ca.crt \
   --cert /etc/vampire-panel/pki/panel-client.crt \
   --key /etc/vampire-panel/pki/panel-client.key \
   -H "Authorization: Bearer $AGENT_TOKEN" \
-  https://node.example.com:8081/v1/node/status
+  https://node.example.com:8081/v1/node/metrics
 ```
 
 ## Network and secrets
@@ -83,8 +95,8 @@ curl --cacert /etc/vampire-panel/pki/node-agent-ca.crt \
 
 ## Not implemented
 
-Docker provisioning, resource telemetry, server lifecycle operations, allocations,
-WebSocket console, file transfer, backups, panel-side enrollment, certificate
-issuance/rotation automation and signed request replay protection are not implemented.
-Do not connect this agent to live customer servers until authorization, Docker
-isolation, quotas, audit logging and integration tests are complete.
+Docker provisioning, per-container resource accounting, server lifecycle operations,
+allocations, WebSocket console, file transfer, backups, panel-side enrollment,
+certificate issuance/rotation automation and signed request replay protection are
+not implemented. Do not connect this agent to live customer servers until
+authorization, Docker isolation, quotas, audit logging and integration tests are complete.

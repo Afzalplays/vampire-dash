@@ -1,17 +1,20 @@
 package main
 
 import (
+ "bufio"
  "context"
  "crypto/subtle"
  "crypto/tls"
  "crypto/x509"
  "encoding/json"
  "errors"
+ "fmt"
  "log"
  "net"
  "net/http"
  "os"
  "os/signal"
+ "runtime"
  "strings"
  "syscall"
  "time"
@@ -24,6 +27,7 @@ type config struct {
  TLSCertFile string
  TLSKeyFile string
  ClientCAFile string
+ DataDirectory string
 }
 type statusResponse struct {
  Status string `json:"status"`
@@ -31,7 +35,18 @@ type statusResponse struct {
  Version string `json:"version,omitempty"`
  Timestamp time.Time `json:"timestamp"`
 }
-const version = "0.2.0"
+type metricsResponse struct {
+ NodeID string `json:"nodeId"`
+ Version string `json:"version"`
+ CPUCores int `json:"cpuCores"`
+ MemoryTotalMB uint64 `json:"memoryTotalMb"`
+ MemoryAvailableMB uint64 `json:"memoryAvailableMb"`
+ DiskTotalMB uint64 `json:"diskTotalMb"`
+ DiskAvailableMB uint64 `json:"diskAvailableMb"`
+ DataDirectory string `json:"dataDirectory"`
+ SampledAt time.Time `json:"sampledAt"`
+}
+const version = "0.3.0"
 
 func loadConfig() (config, error) {
  c := config{
@@ -41,8 +56,10 @@ func loadConfig() (config, error) {
   TLSCertFile: strings.TrimSpace(os.Getenv("AGENT_TLS_CERT")),
   TLSKeyFile: strings.TrimSpace(os.Getenv("AGENT_TLS_KEY")),
   ClientCAFile: strings.TrimSpace(os.Getenv("AGENT_CLIENT_CA")),
+  DataDirectory: strings.TrimSpace(os.Getenv("AGENT_DATA_DIR")),
  }
  if c.ListenAddress == "" { c.ListenAddress = "127.0.0.1:8081" }
+ if c.DataDirectory == "" { c.DataDirectory = "/" }
  if _, _, err := net.SplitHostPort(c.ListenAddress); err != nil { return c, errors.New("AGENT_LISTEN must be host:port") }
  if c.NodeID == "" { return c, errors.New("AGENT_NODE_ID is required") }
  if len(c.AgentToken) < 32 { return c, errors.New("AGENT_TOKEN must contain at least 32 characters") }
@@ -67,13 +84,14 @@ func loadTLSConfig(c config) (*tls.Config, error) {
  }, nil
 }
 
-func writeJSON(w http.ResponseWriter, code int, value statusResponse) {
+func writeJSON(w http.ResponseWriter, code int, value any) {
  w.Header().Set("Content-Type", "application/json; charset=utf-8")
  w.Header().Set("Cache-Control", "no-store")
  w.Header().Set("X-Content-Type-Options", "nosniff")
  w.WriteHeader(code)
  _ = json.NewEncoder(w).Encode(value)
 }
+
 func requireToken(token string, next http.Handler) http.Handler {
  return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
   raw := r.Header.Get("Authorization")
@@ -84,6 +102,60 @@ func requireToken(token string, next http.Handler) http.Handler {
   next.ServeHTTP(w, r)
  })
 }
+
+func readMemory() (uint64, uint64, error) {
+ file, err := os.Open("/proc/meminfo")
+ if err != nil { return 0, 0, err }
+ defer file.Close()
+ var total, available, free uint64
+ scanner := bufio.NewScanner(file)
+ for scanner.Scan() {
+  fields := strings.Fields(scanner.Text())
+  if len(fields) < 2 { continue }
+  value, parseErr := parseUint(fields[1])
+  if parseErr != nil { continue }
+  switch strings.TrimSuffix(fields[0], ":") {
+  case "MemTotal": total = value
+  case "MemAvailable": available = value
+  case "MemFree": free = value
+  }
+ }
+ if err := scanner.Err(); err != nil { return 0, 0, err }
+ if total == 0 { return 0, 0, errors.New("MemTotal is missing from /proc/meminfo") }
+ if available == 0 { available = free }
+ return total / 1024, available / 1024, nil
+}
+
+func parseUint(value string) (uint64, error) {
+ var result uint64
+ if value == "" { return 0, errors.New("empty integer") }
+ for _, ch := range value {
+  if ch < '0' || ch > '9' { return 0, fmt.Errorf("invalid integer") }
+  result = result*10 + uint64(ch-'0')
+ }
+ return result, nil
+}
+
+func readDisk(path string) (uint64, uint64, error) {
+ var stat syscall.Statfs_t
+ if err := syscall.Statfs(path, &stat); err != nil { return 0, 0, err }
+ blockSize := uint64(stat.Bsize)
+ return (stat.Blocks * blockSize) / (1024 * 1024), (stat.Bavail * blockSize) / (1024 * 1024), nil
+}
+
+func collectMetrics(c config) (metricsResponse, error) {
+ memoryTotal, memoryAvailable, err := readMemory()
+ if err != nil { return metricsResponse{}, err }
+ diskTotal, diskAvailable, err := readDisk(c.DataDirectory)
+ if err != nil { return metricsResponse{}, fmt.Errorf("read data directory disk capacity: %w", err) }
+ return metricsResponse{
+  NodeID:c.NodeID, Version:version, CPUCores:runtime.NumCPU(),
+  MemoryTotalMB:memoryTotal, MemoryAvailableMB:memoryAvailable,
+  DiskTotalMB:diskTotal, DiskAvailableMB:diskAvailable,
+  DataDirectory:c.DataDirectory, SampledAt:time.Now().UTC(),
+ }, nil
+}
+
 func newHandler(c config) http.Handler {
  mux := http.NewServeMux()
  mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
@@ -91,6 +163,14 @@ func newHandler(c config) http.Handler {
  })
  mux.Handle("GET /v1/node/status", requireToken(c.AgentToken, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
   writeJSON(w, http.StatusOK, statusResponse{Status:"online", NodeID:c.NodeID, Version:version, Timestamp:time.Now().UTC()})
+ })))
+ mux.Handle("GET /v1/node/metrics", requireToken(c.AgentToken, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+  metrics, err := collectMetrics(c)
+  if err != nil {
+   http.Error(w, "node metrics unavailable", http.StatusServiceUnavailable)
+   return
+  }
+  writeJSON(w, http.StatusOK, metrics)
  })))
  return mux
 }
