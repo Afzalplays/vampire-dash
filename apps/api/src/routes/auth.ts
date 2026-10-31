@@ -8,7 +8,7 @@ import { sendMail } from "../lib/mailer.js";
 
 const registerSchema = z.object({ email: z.string().email().max(254), username: z.string().min(3).max(24).regex(/^[a-zA-Z0-9_]+$/), password: z.string().min(12).max(128) });
 const loginSchema = z.object({ email: z.string().email(), password: z.string().min(1).max(128) });
-const otpSchema = z.object({ email: z.string().email().max(254), otp: z.string().regex(/^\\d{6}$/) });
+const otpSchema = z.object({ email: z.string().email().max(254), otp: z.string().regex(/^\d{6}$/) });
 const cookieName = "vd_session";
 const hash = (v: string) => createHmac("sha256", env.SESSION_SECRET).update(v, "utf8").digest("hex");
 
