@@ -4,7 +4,13 @@ The project will ship a single entry-point installer only after application sour
 
 ## Intended operator experience
 
-A root/sudo operator will run one HTTPS-fetched command from the official Vampire Dash release. The installer must pin a tagged release and verify its checksum/signature before executing downloaded application code. It must never execute an unpinned `main` branch snapshot.
+The official public command will be:
+
+```bash
+curl -fsSL https://dash.vampirenodes.in/install.sh | sudo bash
+```
+
+The hostname `dash.vampirenodes.in` is the canonical installer origin. DNS must point to the production panel/release host and HTTPS must be valid before publishing this command. The `/install.sh` route must serve the exact signed release installer; it must not be a redirect to an unpinned branch or an unrelated website. The installer must pin a tagged release and verify its checksum/signature before executing downloaded application code.
 
 ## Supported targets
 

@@ -13,8 +13,9 @@
 - [x] AES-256-GCM encrypted storage for node-agent bearer credentials
 - [x] Panel-side mTLS client for authenticated read-only node telemetry and admin health checks
 - [x] Scheduled node health polling with PostgreSQL advisory-lock coordination and transition-only audit events
+- [x] Node capacity reservation API with serialized overcommit checks, configurable overhead, expiry and idempotency
 - [ ] Automated node enrollment/rotation
-- [ ] Docker capacity accounting and reservation-safe scheduling
+- [ ] Connect reservations to customer server creation and server lifecycle transitions
 - [ ] Docker provisioning with per-server isolation and strict resource limits
 - [ ] Server lifecycle state machine and reconciliation worker
 - [ ] Port allocation and firewall integration
