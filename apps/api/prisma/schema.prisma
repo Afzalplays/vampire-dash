@@ -44,7 +44,19 @@ enum PlanEntitlementStatus {
   CANCELLED
 }
 
-enum MinecraftSoftwareType {\n  VANILLA\n  PAPER\n  PURPUR\n  FABRIC\n  FORGE\n  NEOFORGE\n  VELOCITY\n  BUNGEECORD\n  BEDROCK\n}\n\nenum ServerOperationType {
+enum MinecraftSoftwareType {
+  VANILLA
+  PAPER
+  PURPUR
+  FABRIC
+  FORGE
+  NEOFORGE
+  VELOCITY
+  BUNGEECORD
+  BEDROCK
+}
+
+enum ServerOperationType {
   INSTALL_PLUGIN
   INSTALL_MOD
   INSTALL_MODPACK
@@ -260,7 +272,24 @@ model MinecraftServer {
   @@index([ownerId, createdAt])
 }
 
-model MinecraftSoftwareRelease {\n  id                  String @id @default(cuid())\n  software            MinecraftSoftwareType\n  minecraftVersion    String\n  softwareVersion     String\n  javaMajor           Int\n  dockerImage         String\n  downloadUrl         String?\n  checksumSha256      String?\n  recommended         Boolean @default(false)\n  enabled             Boolean @default(false)\n  createdAt           DateTime @default(now())\n  updatedAt           DateTime @updatedAt\n  @@unique([software, minecraftVersion, softwareVersion])\n  @@index([enabled, software, minecraftVersion])\n}\n\nmodel MinecraftServerOperation {
+model MinecraftSoftwareRelease {
+  id                  String @id @default(cuid())
+  software            MinecraftSoftwareType
+  minecraftVersion    String
+  softwareVersion     String
+  javaMajor           Int
+  dockerImage         String
+  downloadUrl         String?
+  checksumSha256      String?
+  recommended         Boolean @default(false)
+  enabled             Boolean @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  @@unique([software, minecraftVersion, softwareVersion])
+  @@index([enabled, software, minecraftVersion])
+}
+
+model MinecraftServerOperation {
   id             String @id @default(cuid())
   serverId       String
   actorUserId    String

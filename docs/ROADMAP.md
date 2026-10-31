@@ -33,7 +33,8 @@
 - [x] Database-backed plan catalogue and customer entitlement read APIs
 - [ ] Admin plan CRUD UI and plan purchase/renewal flow
 - [ ] Enforce entitlement quotas during server creation
-- [x] Curated Minecraft software release catalogue API with admin registration and public filters\n- [ ] Automated upstream release sync, runtime compatibility resolver and verified image allowlist
+- [x] Curated Minecraft software release catalogue API with admin registration and public filters
+- [ ] Automated upstream release sync, runtime compatibility resolver and verified image allowlist
 - [ ] Plugin installer with trusted provider metadata and checksums
 - [ ] Mod installer for Fabric/Forge/NeoForge with dependency checks
 - [ ] Modpack installer with pinned manifests and rollback
