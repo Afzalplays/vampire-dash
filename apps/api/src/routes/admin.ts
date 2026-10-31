@@ -6,6 +6,7 @@ import { env } from "../env.js";
 import { requireAdmin } from "../lib/authenticate.js";
 import { listPaymentProviders } from "../billing/registry.js";
 import { encryptNodeCredential } from "../lib/node-credentials.js";
+import { fetchNodeMetrics } from "../lib/node-agent-client.js";
 
 const nodeCreateSchema = z.object({
   name: z.string().trim().min(2).max(64),
@@ -41,7 +42,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     const admin = await requireAdmin(request, reply);
     if (!admin) return;
     const nodes = await prisma.minecraftNode.findMany({
-      select: { id: true, name: true, location: true, endpoint: true, enabled: true, memoryMb: true, diskMb: true, createdAt: true, _count: { select: { servers: true } } },
+      select: { id: true, name: true, location: true, endpoint: true, enabled: true, memoryMb: true, diskMb: true, healthStatus: true, lastSeenAt: true, agentVersion: true, cpuCores: true, memoryAvailableMb: true, diskAvailableMb: true, metricsSampledAt: true, lastHealthError: true, createdAt: true, _count: { select: { servers: true } } },
       orderBy: { createdAt: "desc" },
     });
     return { nodes };
@@ -76,6 +77,37 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     await prisma.auditLog.create({ data: { actorUserId: admin.id, action: "NODE_REGISTERED", targetId: node.id, details: `Registered node ${node.name} at ${node.endpoint}; disabled pending secure agent enrollment` } });
     // Raw token is shown once; encrypted copy is retained for authenticated panel-to-agent requests.
     return reply.code(201).send({ node, agentToken: token, warning: "Copy this token now. It will not be shown again. Node remains disabled until mTLS enrollment is implemented." });
+  });
+
+  app.post("/nodes/:nodeId/check", { config: { rateLimit: { max: 12, timeWindow: "1 minute" } } }, async (request, reply) => {
+    const admin = await requireAdmin(request, reply);
+    if (!admin) return;
+    const params = z.object({ nodeId: z.string().min(1).max(128) }).safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ error: "Invalid node ID" });
+    const node = await prisma.minecraftNode.findUnique({ where: { id: params.data.nodeId } });
+    if (!node) return reply.code(404).send({ error: "Node not found" });
+    if (!node.tokenCiphertext || !node.tokenNonce || !node.tokenAuthTag) {
+      return reply.code(409).send({ error: "Node credentials are unavailable; re-register this node" });
+    }
+    try {
+      const metrics = await fetchNodeMetrics(node.endpoint, {
+        ciphertext: node.tokenCiphertext, nonce: node.tokenNonce, authTag: node.tokenAuthTag,
+      });
+      if (metrics.nodeId !== node.id) throw new Error("Agent identity does not match the registered node");
+      const sampledAt = new Date(metrics.sampledAt);
+      const updated = await prisma.minecraftNode.update({ where: { id: node.id }, data: {
+        healthStatus: "ONLINE", lastSeenAt: new Date(), agentVersion: metrics.version,
+        cpuCores: metrics.cpuCores, memoryAvailableMb: BigInt(metrics.memoryAvailableMb),
+        diskAvailableMb: BigInt(metrics.diskAvailableMb), metricsSampledAt: sampledAt, lastHealthError: null,
+      }, select: { id: true, name: true, healthStatus: true, lastSeenAt: true, agentVersion: true, cpuCores: true, memoryAvailableMb: true, diskAvailableMb: true, metricsSampledAt: true } });
+      await prisma.auditLog.create({ data: { actorUserId: admin.id, action: "NODE_HEALTH_CHECKED", targetId: node.id, details: `Node agent ${metrics.version} responded successfully` } });
+      return { node: { ...updated, memoryAvailableMb: updated.memoryAvailableMb?.toString() ?? null, diskAvailableMb: updated.diskAvailableMb?.toString() ?? null } };
+    } catch (error) {
+      const message = error instanceof Error ? error.message.slice(0, 300) : "Node health check failed";
+      await prisma.minecraftNode.update({ where: { id: node.id }, data: { healthStatus: "OFFLINE", lastHealthError: message } });
+      await prisma.auditLog.create({ data: { actorUserId: admin.id, action: "NODE_HEALTH_CHECK_FAILED", targetId: node.id, details: message } });
+      return reply.code(502).send({ error: "Node health check failed", detail: message });
+    }
   });
 
   app.post("/nodes/:nodeId/disable", async (request, reply) => {

@@ -140,12 +140,20 @@ model MinecraftNode {
   tokenHash      String           @unique
   tokenCiphertext String?
   tokenNonce     String?
-  tokenAuthTag   String?
-  enabled        Boolean          @default(false)
-  memoryMb       Int
-  diskMb         Int
-  createdAt      DateTime         @default(now())
-  servers        MinecraftServer[]
+  tokenAuthTag        String?
+  enabled             Boolean          @default(false)
+  memoryMb            Int
+  diskMb              Int
+  healthStatus        String           @default("UNKNOWN")
+  lastSeenAt          DateTime?
+  agentVersion        String?
+  cpuCores            Int?
+  memoryAvailableMb   BigInt?
+  diskAvailableMb     BigInt?
+  metricsSampledAt    DateTime?
+  lastHealthError     String?
+  createdAt           DateTime         @default(now())
+  servers             MinecraftServer[]
 }
 model MinecraftServer {
   id         String       @id @default(cuid())
