@@ -16,7 +16,7 @@ Base path: `/api`.
 
 Email event templates are documented in [EMAIL-NOTIFICATIONS.md](EMAIL-NOTIFICATIONS.md). SMTP credentials must remain in the API environment.
 
-## Admin
+## Minecraft software catalogue\n- `GET /software/releases` — list enabled releases; optional filters: `software` and `minecraftVersion`.\n- `POST /admin/software/releases` — admin-only curated release registration. Body includes `software`, `minecraftVersion`, `softwareVersion`, `javaMajor`, `dockerImage`, optional `downloadUrl`, `checksumSha256`, `recommended` and `enabled`.\n\nThe catalogue is empty until an administrator adds verified releases. Adding a catalogue record does not download, install or provision a server. Container image references and artifact metadata must be verified before enabling a release.\n\n## Admin
 - `GET /admin/nodes` — list nodes with configured capacity, reserved capacity, overhead and telemetry.
 - `POST /admin/nodes` — register a disabled node using an HTTPS endpoint and bounded capacity values; returns a random agent token once.
 - `POST /admin/nodes/:nodeId/check` — manually check node mTLS connectivity and refresh telemetry.

@@ -44,7 +44,7 @@ enum PlanEntitlementStatus {
   CANCELLED
 }
 
-enum ServerOperationType {
+enum MinecraftSoftwareType {\n  VANILLA\n  PAPER\n  PURPUR\n  FABRIC\n  FORGE\n  NEOFORGE\n  VELOCITY\n  BUNGEECORD\n  BEDROCK\n}\n\nenum ServerOperationType {
   INSTALL_PLUGIN
   INSTALL_MOD
   INSTALL_MODPACK
@@ -260,7 +260,7 @@ model MinecraftServer {
   @@index([ownerId, createdAt])
 }
 
-model MinecraftServerOperation {
+model MinecraftSoftwareRelease {\n  id                  String @id @default(cuid())\n  software            MinecraftSoftwareType\n  minecraftVersion    String\n  softwareVersion     String\n  javaMajor           Int\n  dockerImage         String\n  downloadUrl         String?\n  checksumSha256      String?\n  recommended         Boolean @default(false)\n  enabled             Boolean @default(false)\n  createdAt           DateTime @default(now())\n  updatedAt           DateTime @updatedAt\n  @@unique([software, minecraftVersion, softwareVersion])\n  @@index([enabled, software, minecraftVersion])\n}\n\nmodel MinecraftServerOperation {
   id             String @id @default(cuid())
   serverId       String
   actorUserId    String

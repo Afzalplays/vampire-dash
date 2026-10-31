@@ -11,7 +11,7 @@ The supported software catalogue is planned to cover:
 
 Version changes must be compatibility-checked against the selected software loader, Java runtime, installed plugins/mods and server data. A version change is a queued operation with a backup/recovery checkpoint; never overwrite a live server jar while its process is running. Keep the currently working version available for rollback.
 
-## Plugin installer
+## Software release catalogue foundation\n\nThe API now stores curated software releases with software family, Minecraft version, software version, Java major version, pinned container image reference, optional download URL and SHA-256 checksum, plus enabled/recommended flags. Public reads expose enabled entries only; admin creation is authenticated, validated and audited. The catalogue starts empty and no release is automatically trusted or installed. Upstream synchronization, compatibility resolution and image allowlisting remain required before production provisioning.\n\n## Plugin installer
 
 The plugin installer will support compatible plugins for Paper/Spigot/Purpur-family servers. The catalogue must store provider, project ID, file ID, supported game versions, supported software, download URL, checksum and license/source metadata. Reject incompatible loaders and untrusted direct URLs. Install only into the isolated server's plugin directory.
 

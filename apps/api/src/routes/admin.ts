@@ -21,6 +21,29 @@ const nodeCreateSchema = z.object({
 const nodeTokenDigest = (token: string) => createHmac("sha256", env.SESSION_SECRET).update(token, "utf8").digest("hex");
 
 export const adminRoutes: FastifyPluginAsync = async (app) => {
+  app.post("/software/releases", async (request, reply) => {
+    const admin = await requireAdmin(request, reply); if (!admin) return;
+    const body = z.object({
+      software: z.enum(["VANILLA", "PAPER", "PURPUR", "FABRIC", "FORGE", "NEOFORGE", "VELOCITY", "BUNGEECORD", "BEDROCK"]),
+      minecraftVersion: z.string().trim().min(1).max(32),
+      softwareVersion: z.string().trim().min(1).max(64),
+      javaMajor: z.number().int().min(8).max(30),
+      dockerImage: z.string().trim().min(3).max(255).regex(/^[A-Za-z0-9._/:@-]+$/, "Invalid container image reference"),
+      downloadUrl: z.string().url().max(2048).optional(),
+      checksumSha256: z.string().regex(/^[a-fA-F0-9]{64}$/).optional(),
+      recommended: z.boolean().optional(),
+      enabled: z.boolean().optional(),
+    }).safeParse(request.body);
+    if (!body.success) return reply.code(400).send({ error: "Invalid software release", details: body.error.flatten() });
+    try {
+      const release = await prisma.minecraftSoftwareRelease.create({ data: body.data });
+      await prisma.auditLog.create({ data: { actorUserId: admin.id, action: "SOFTWARE_RELEASE_CREATED", targetId: release.id, details: `Added ${release.software} ${release.softwareVersion} for Minecraft ${release.minecraftVersion}; enabled=${release.enabled}` } });
+      return reply.code(201).send({ release });
+    } catch (error) {
+      if (typeof error === "object" && error !== null && "code" in error && error.code === "P2002") return reply.code(409).send({ error: "This software release already exists" });
+      throw error;
+    }
+  });
   app.get("/users", async (request, reply) => {
     const admin = await requireAdmin(request, reply); if (!admin) return;
     const users = await prisma.user.findMany({ select: { id: true, email: true, username: true, role: true, status: true, createdAt: true }, orderBy: { createdAt: "desc" }, take: 100 });
