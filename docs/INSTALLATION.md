@@ -23,3 +23,8 @@ In another terminal, run npm run dev and open http://localhost:3000. API health:
 
 ## Notes
 The API currently provides starter email/password routes and database health checks. Production deployment, OAuth, MFA, CSRF protection, full billing workflows, node provisioning and customer server operations are not complete. Do not expose the API publicly or accept customer payments with this development scaffold.
+
+
+## Production single-command installer
+
+The planned installer is documented in [INSTALLER-SPEC.md](INSTALLER-SPEC.md). It will install dependencies automatically for the selected panel or node role, configure PostgreSQL/Nginx/systemd, and set up HTTPS after DNS validation. The installer script itself will be committed only after application code, docs and release checks are complete.

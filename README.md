@@ -51,3 +51,8 @@ Never commit API keys, environment files, private keys, customer data or product
 
 ---
 Copyright VampireHosting 2026 - 2027
+
+
+## Automated installation
+
+The single-command panel/node installer is planned as the final release stage. Its safety and supported-platform requirements are documented in [docs/INSTALLER-SPEC.md](docs/INSTALLER-SPEC.md). It is not published yet; use the development setup until the release installer passes its fresh-install, upgrade, TLS and SSH-preservation tests.

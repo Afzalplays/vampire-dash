@@ -46,3 +46,8 @@ server before issuance. Certbot configuration differs by operating system and pr
 - Run dependency, container and application security scans.
 
 Do not run a public installer or accept live payments until all release gates are satisfied.
+
+
+## Automated installation target
+
+See [INSTALLER-SPEC.md](INSTALLER-SPEC.md) for supported OS versions, panel/node profiles, dependency installation, TLS requirements, firewall/SSH preservation, backup/rollback behavior and release gates. A production installer must not be run from an unpinned branch or bypass certificate verification.
