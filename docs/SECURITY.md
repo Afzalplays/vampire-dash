@@ -1,7 +1,8 @@
 # Security model
 
 - Passwords: Argon2id; never store plaintext passwords.
-- Sessions: random opaque tokens, store only token digests, HttpOnly/SameSite cookies and bounded expiry.
+- Sessions: random opaque tokens; store only keyed HMAC-SHA-256 digests; HttpOnly/SameSite cookies and bounded expiry.
+- Email verification: 6-digit, 10-minute OTP; HMAC-SHA-256 digest keyed by SESSION_SECRET; constant-time digest comparison; five-attempt cap.
 - Authorization: deny by default; enforce ownership and admin roles in API handlers. Registration creates USER only.
 - Transport: HTTPS for public web/API, TLS 1.2 minimum, automatic certificate renewal and HTTP-to-HTTPS redirect.
 - Node channel: mandatory mTLS with certificate verification plus unique per-node bearer token; no plaintext fallback.
@@ -14,5 +15,5 @@
 - Operations: audit admin actions and security-sensitive account changes.
 
 The starter is not production-ready. CSRF protection, MFA, OAuth, webhook handling,
-automated node enrollment, Docker isolation and security tests remain incomplete.
+automated node enrollment, Docker isolation and security integration tests remain incomplete.
 Do not deploy for live customers.
