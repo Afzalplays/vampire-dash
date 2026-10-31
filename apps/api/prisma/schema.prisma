@@ -1,0 +1,132 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum AccountStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  EXPIRED
+  REFUNDED
+}
+
+model User {
+  id                  String        @id @default(cuid())
+  email               String        @unique
+  username            String        @unique
+  passwordHash        String
+  role                UserRole      @default(USER)
+  status              AccountStatus @default(ACTIVE)
+  emailVerifiedAt     DateTime?
+  totpSecretEncrypted String?
+  totpEnabled         Boolean       @default(false)
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  sessions            Session[]
+  servers             MinecraftServer[]
+  wallet              Wallet?
+  auditEvents         AuditLog[]    @relation("AuditActor")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, expiresAt])
+}
+
+model Wallet {
+  id          String         @id @default(cuid())
+  userId      String         @unique
+  currency    String         @default("INR")
+  balancePaise BigInt        @default(0)
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ledger      WalletLedger[]
+}
+
+model WalletLedger {
+  id          String   @id @default(cuid())
+  walletId    String
+  amountPaise BigInt
+  currency    String   @default("INR")
+  kind        String
+  reference   String?  @unique
+  description String
+  createdAt   DateTime @default(now())
+  wallet      Wallet   @relation(fields: [walletId], references: [id], onDelete: Restrict)
+  @@index([walletId, createdAt])
+}
+
+model PaymentOrder {
+  id              String        @id @default(cuid())
+  userId          String
+  provider        String
+  providerOrderId String?
+  amountPaise     BigInt
+  currency        String        @default("INR")
+  status          PaymentStatus @default(PENDING)
+  idempotencyKey  String        @unique
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  @@index([userId, createdAt])
+  @@unique([provider, providerOrderId])
+}
+
+model MinecraftNode {
+  id        String           @id @default(cuid())
+  name      String
+  location  String
+  endpoint  String
+  tokenHash String           @unique
+  enabled   Boolean          @default(false)
+  memoryMb  Int
+  diskMb    Int
+  createdAt DateTime         @default(now())
+  servers   MinecraftServer[]
+}
+
+model MinecraftServer {
+  id        String       @id @default(cuid())
+  ownerId   String
+  nodeId    String?
+  name      String
+  software  String
+  version   String
+  memoryMb  Int
+  diskMb    Int
+  cpuPercent Int
+  status    String       @default("PENDING")
+  createdAt DateTime     @default(now())
+  owner     User         @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  node      MinecraftNode? @relation(fields: [nodeId], references: [id], onDelete: SetNull)
+  @@index([ownerId, createdAt])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorUserId String?
+  action      String
+  targetId    String?
+  details     String
+  createdAt   DateTime @default(now())
+  actor       User?    @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  @@index([actorUserId, createdAt])
+}
