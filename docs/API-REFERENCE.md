@@ -15,3 +15,10 @@ Base path: `/api`.
 - `PATCH /notifications/preferences` — update any of `emailEnabled`, `serverAlerts`, `billingAlerts`, `securityAlerts`.
 
 Email event templates are documented in [EMAIL-NOTIFICATIONS.md](EMAIL-NOTIFICATIONS.md). SMTP credentials must remain in the API environment.
+
+## Admin
+- `GET /admin/nodes` — list registered nodes without credential material.
+- `POST /admin/nodes` — register a disabled node using an HTTPS endpoint and bounded capacity values; returns a random agent token once.
+- `POST /admin/nodes/:nodeId/disable` — disable a registered node.
+
+All admin endpoints require an authenticated ADMIN session. Node registration and disable actions are audit logged. A newly registered node remains disabled until the mTLS enrollment and activation workflow is implemented.

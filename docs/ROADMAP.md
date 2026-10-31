@@ -8,7 +8,8 @@
 - [x] Go node-agent liveness and authenticated identity foundation
 
 ## Core platform
-- [ ] Panel-side node enrollment, credential rotation and health persistence
+- [x] Admin node registration, one-time bearer-token issuance, audit logging and disable endpoint (mTLS enrollment/rotation still pending)
+- [ ] Panel-side mTLS enrollment, credential rotation and health persistence
 - [ ] Node telemetry: CPU, memory, disk and Docker capacity
 - [ ] Docker provisioning with per-server isolation and strict resource limits
 - [ ] Server lifecycle state machine and reconciliation worker
