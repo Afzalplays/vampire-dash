@@ -7,3 +7,6 @@ Registration and login have endpoint-specific rate limits. New registrations are
 Session cookies are HttpOnly and SameSite=Lax; production requires HTTPS and COOKIE_SECURE=true.
 
 Still required before production: CSRF protection for cookie-authenticated mutations, password reset, Google OAuth with state/nonce validation, TOTP MFA enrollment/verification and hashed recovery codes, session rotation/revocation controls, account abuse monitoring and security integration tests. Admin role assignment must be an audited out-of-band operation, never a registration field.
+
+
+**Upgrade note:** Switching session-token digests from unkeyed SHA-256 to keyed HMAC invalidates sessions created by earlier versions. Users must sign in again after deploying this change. No plaintext session tokens are available to migrate safely.
