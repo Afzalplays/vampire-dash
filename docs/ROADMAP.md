@@ -35,6 +35,7 @@
 - [ ] Enforce entitlement quotas during server creation
 - [x] Curated Minecraft software release catalogue API with admin registration and public filters
 - [ ] Automated upstream release sync, runtime compatibility resolver and verified image allowlist
+- [x] Plugin/mod/modpack provider project and pinned-file catalogue schema with admin registration and public compatibility filters
 - [ ] Plugin installer with trusted provider metadata and checksums
 - [ ] Mod installer for Fabric/Forge/NeoForge with dependency checks
 - [ ] Modpack installer with pinned manifests and rollback

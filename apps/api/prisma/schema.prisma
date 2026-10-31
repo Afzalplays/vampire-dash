@@ -289,6 +289,58 @@ model MinecraftSoftwareRelease {
   @@index([enabled, software, minecraftVersion])
 }
 
+
+enum MinecraftArtifactKind {
+  PLUGIN
+  MOD
+  MODPACK
+}
+
+enum MinecraftArtifactProvider {
+  MODRINTH
+  CURSEFORGE
+}
+
+model MinecraftArtifactProject {
+  id                    String @id @default(cuid())
+  kind                  MinecraftArtifactKind
+  provider              MinecraftArtifactProvider
+  providerProjectId     String
+  slug                  String
+  title                 String
+  summary               String @default("")
+  projectUrl            String
+  sourceUrl             String?
+  licenseId             String?
+  supportedSoftware     MinecraftSoftwareType[]
+  supportedGameVersions String[]
+  loaders               String[]
+  enabled               Boolean @default(false)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  files                 MinecraftArtifactFile[]
+  @@unique([provider, providerProjectId])
+  @@index([enabled, kind, provider])
+}
+
+model MinecraftArtifactFile {
+  id                String @id @default(cuid())
+  projectId         String
+  providerFileId    String
+  versionNumber     String
+  downloadUrl       String
+  sha256            String?
+  sizeBytes         BigInt?
+  gameVersions      String[]
+  loaders           String[]
+  enabled           Boolean @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  project           MinecraftArtifactProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  @@unique([projectId, providerFileId])
+  @@index([enabled, projectId])
+}
+
 model MinecraftServerOperation {
   id             String @id @default(cuid())
   serverId       String

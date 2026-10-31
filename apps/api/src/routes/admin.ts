@@ -69,6 +69,64 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     } });
     return { release };
   });
+
+  app.post("/artifacts/projects", async (request, reply) => {
+    const admin = await requireAdmin(request, reply); if (!admin) return;
+    const parsed = z.object({
+      kind: z.enum(["PLUGIN", "MOD", "MODPACK"]),
+      provider: z.enum(["MODRINTH", "CURSEFORGE"]),
+      providerProjectId: z.string().trim().min(1).max(128),
+      slug: z.string().trim().min(1).max(128).regex(/^[a-zA-Z0-9_-]+$/),
+      title: z.string().trim().min(1).max(160),
+      summary: z.string().max(2000).default(""),
+      projectUrl: z.string().url().max(2048),
+      sourceUrl: z.string().url().max(2048).optional(),
+      licenseId: z.string().trim().max(128).optional(),
+      supportedSoftware: z.array(z.enum(["VANILLA", "PAPER", "PURPUR", "FABRIC", "FORGE", "NEOFORGE", "VELOCITY", "BUNGEECORD", "BEDROCK"])).max(9).default([]),
+      supportedGameVersions: z.array(z.string().trim().min(1).max(32)).max(100).default([]),
+      loaders: z.array(z.string().trim().min(1).max(32)).max(20).default([]),
+      enabled: z.boolean().default(false),
+    }).safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid artifact project", details: parsed.error.flatten() });
+    const allowedHosts = parsed.data.provider === "MODRINTH" ? ["modrinth.com", "www.modrinth.com"] : ["curseforge.com", "www.curseforge.com"];
+    const validProviderUrl = (value: string) => { try { const url = new URL(value); return url.protocol === "https:" && allowedHosts.includes(url.hostname) && !url.username && !url.password; } catch { return false; } };
+    if (!validProviderUrl(parsed.data.projectUrl) || (parsed.data.sourceUrl && !validProviderUrl(parsed.data.sourceUrl))) return reply.code(400).send({ error: "Project and source URLs must use the selected provider's HTTPS domain" });
+    try {
+      const project = await prisma.minecraftArtifactProject.create({ data: parsed.data });
+      await prisma.auditLog.create({ data: { actorUserId: admin.id, action: "ARTIFACT_PROJECT_CREATED", targetId: project.id, details: `Added ${project.kind} ${project.title} from ${project.provider}; enabled=${project.enabled}` } });
+      return reply.code(201).send({ project });
+    } catch (error) {
+      if (typeof error === "object" && error !== null && "code" in error && error.code === "P2002") return reply.code(409).send({ error: "This provider project already exists" });
+      throw error;
+    }
+  });
+  app.post("/artifacts/projects/:projectId/files", async (request, reply) => {
+    const admin = await requireAdmin(request, reply); if (!admin) return;
+    const params = z.object({ projectId: z.string().min(1).max(128) }).safeParse(request.params);
+    const parsed = z.object({
+      providerFileId: z.string().trim().min(1).max(128),
+      versionNumber: z.string().trim().min(1).max(64),
+      downloadUrl: z.string().url().max(2048),
+      sha256: z.string().regex(/^[a-fA-F0-9]{64}$/).optional(),
+      sizeBytes: z.number().int().positive().max(2_147_483_647).optional(),
+      gameVersions: z.array(z.string().trim().min(1).max(32)).max(100).default([]),
+      loaders: z.array(z.string().trim().min(1).max(32)).max(20).default([]),
+      enabled: z.boolean().default(false),
+    }).safeParse(request.body);
+    if (!params.success || !parsed.success) return reply.code(400).send({ error: "Invalid artifact file", details: parsed.success ? undefined : parsed.error.flatten() });
+    const project = await prisma.minecraftArtifactProject.findUnique({ where: { id: params.data.projectId } });
+    if (!project) return reply.code(404).send({ error: "Artifact project not found" });
+    const downloadHostAllowed = (value: string) => { try { const url = new URL(value); return url.protocol === "https:" && (project.provider === "MODRINTH" ? url.hostname === "cdn.modrinth.com" : url.hostname.endsWith(".forgecdn.net") || url.hostname === "mediafilez.forgecdn.net"); } catch { return false; } };
+    if (!downloadHostAllowed(parsed.data.downloadUrl)) return reply.code(400).send({ error: "Download URL host is not allowed for this provider" });
+    try {
+      const file = await prisma.minecraftArtifactFile.create({ data: { ...parsed.data, projectId: project.id, sizeBytes: parsed.data.sizeBytes === undefined ? undefined : BigInt(parsed.data.sizeBytes) } });
+      await prisma.auditLog.create({ data: { actorUserId: admin.id, action: "ARTIFACT_FILE_CREATED", targetId: file.id, details: `Added ${project.kind} file ${file.versionNumber} for ${project.title}; enabled=${file.enabled}` } });
+      return reply.code(201).send({ file: { ...file, sizeBytes: file.sizeBytes?.toString() ?? null } });
+    } catch (error) {
+      if (typeof error === "object" && error !== null && "code" in error && error.code === "P2002") return reply.code(409).send({ error: "This provider file already exists for the project" });
+      throw error;
+    }
+  });
   app.get("/users", async (request, reply) => {
     const admin = await requireAdmin(request, reply); if (!admin) return;
     const users = await prisma.user.findMany({ select: { id: true, email: true, username: true, role: true, status: true, createdAt: true }, orderBy: { createdAt: "desc" }, take: 100 });

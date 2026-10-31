@@ -31,3 +31,10 @@ The catalogue is empty until an administrator adds verified releases. Adding a c
 - `POST /admin/nodes/:nodeId/disable` — disable a registered node.
 
 All admin endpoints require an authenticated ADMIN session. Capacity reservations serialize on the node row, subtract configured overhead, use a unique idempotency key and reject overcommit. Host telemetry is informational; it is not treated as guaranteed allocatable capacity. Provisioning is not yet connected to reservations.
+
+## Plugin, mod and modpack catalogue
+- `GET /artifacts` — list enabled projects and enabled versioned files; optional filters: `kind`, `software`, `minecraftVersion`, `loader`.
+- `POST /admin/artifacts/projects` — admin-only project registration from Modrinth or CurseForge with compatibility, source and license metadata.
+- `POST /admin/artifacts/projects/:projectId/files` — admin-only version/file registration with provider CDN host validation and optional SHA-256/size metadata.
+
+Catalogue records default to disabled. These endpoints store metadata only; they do not download or install artifacts.

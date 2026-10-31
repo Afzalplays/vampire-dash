@@ -48,3 +48,11 @@ Utilities must be permission-checked per server, audited, rate-limited and execu
 The database includes a durable, idempotent server-operation queue model for plugin/mod/modpack installation, version changes and common lifecycle/utility operations. This is a queue/data foundation only: a secure worker, node-agent command protocol, catalog integrations and execution handlers must be completed before these actions are exposed as working controls.
 
 All downloaded artifacts require size limits, checksum verification, compatibility validation and isolated storage. The catalog and execution integrations are not yet production-ready.
+
+## Trusted plugin, mod and modpack catalogue foundation
+
+The database now models provider projects and versioned files from Modrinth or CurseForge. Projects retain provider IDs, supported software/game versions, loader compatibility, source and license metadata. Files retain provider file IDs, pinned versions, download URLs, SHA-256 and size metadata. Records default to disabled and must be explicitly curated by an administrator.
+
+Admin project registration validates that project/source URLs use the selected provider's HTTPS domain. File registration validates provider-specific CDN hosts and SHA-256 format when supplied. Public catalogue reads expose enabled projects and enabled files only, with optional kind, software, Minecraft version and loader filters.
+
+This is metadata/catalogue infrastructure, not an installer. The API does not fetch provider metadata or download files, and it does not claim a file is safe solely because its URL is allowlisted. Production installation still requires mandatory checksum verification, file-size enforcement, compatibility/dependency resolution and isolated node-agent execution.
