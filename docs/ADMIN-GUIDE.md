@@ -13,3 +13,5 @@ Administrators can register a node with `POST /api/admin/nodes`. The endpoint mu
 An administrator can reserve capacity on an enabled, online node using `POST /api/admin/nodes/:nodeId/reservations`. The API serializes reservation attempts on the node row, subtracts configured memory/disk overhead, rejects overcommit, and requires a unique idempotency key. A reservation expires after 15 minutes unless consumed or explicitly released. Use the release endpoint to free a reservation early. Reservations are groundwork for server provisioning and are not yet connected to customer server creation or Docker operations.
 
 Node telemetry reports host-level available resources. It is not a replacement for configured allocatable capacity, resource quotas or a reservation.
+
+A dedicated reservation-expiry worker expires stale holds every 30 seconds and reconciles the node's cached reserved-capacity counters. The admission path also excludes expired holds directly, so a delayed worker does not permit overcommit.
