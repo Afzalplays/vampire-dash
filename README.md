@@ -1,2 +1,5 @@
-# vampire-dash
-VampireHosting — Open-source Minecraft server hosting panel with server management, billing, automation and multi-node support.
+# Vampire Dash
+
+VampireHosting's open-source Minecraft hosting control panel.
+
+Development is in progress. See the project documentation as features are implemented.
