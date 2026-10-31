@@ -1,22 +1,33 @@
-# Development roadmap
+# Roadmap
 
-## Current foundation
-- [x] Next.js dashboard preview and branding
-- [x] Fastify API service foundation and environment validation
-- [x] Prisma starter schema for users, sessions, wallets, payments, nodes and servers
-- [x] Argon2id email/password registration and login starter
-- [x] Server-side role helper and initial admin endpoints
-- [x] FamGateway provider adapter contract and initial order/verification path
+## Foundation
+- [x] Next.js dashboard and authentication screens
+- [x] Fastify API foundation and Prisma data model
+- [x] Email OTP verification foundation
+- [x] SMTP notification templates and expiry reminder worker
+- [x] Go node-agent liveness and authenticated identity foundation
 
-## Remaining before a secure beta
-- [ ] CSRF protection, email verification, password reset and Google OAuth
-- [ ] TOTP enrollment/verification, recovery codes and MFA enforcement
-- [ ] Signed webhook endpoint with raw-body verification and idempotent event store
-- [ ] Automated unit/integration tests and schema migrations committed
-- [ ] Admin and user dashboard connected to API
-- [ ] Node enrollment, agent, Docker isolation and resource enforcement
-- [ ] Server lifecycle, console, files, backups and plugin management
-- [ ] Monitoring, backup/restore drills, deployment hardening and security review
+## Core platform
+- [ ] Panel-side node enrollment, credential rotation and health persistence
+- [ ] Node telemetry: CPU, memory, disk and Docker capacity
+- [ ] Docker provisioning with per-server isolation and strict resource limits
+- [ ] Server lifecycle state machine and reconciliation worker
+- [ ] Port allocation and firewall integration
+- [ ] WebSocket console with authorization and audit logging
+- [ ] File manager with path confinement and upload limits
+- [ ] Backup, restore and scheduled retention
 
-## Installer release gate
-The installer must be the final deliverable after the supported deployment topology, required environment variables, migrations, service health checks, rollback behavior and upgrade strategy are documented and tested. It must never install an incomplete or insecure production system.
+## Customer and admin experience
+- [ ] Customer server list and server detail views backed by API
+- [ ] Admin node, allocation, user and server management
+- [ ] Plan catalogue and quota enforcement
+- [ ] Plugin/modpack/software installation workflows
+
+## Billing and security
+- [ ] FamGateway webhook signature verification and payment reconciliation
+- [ ] Durable email queue, retry/backoff and delivery monitoring
+- [ ] MFA, CSRF protection, session revocation and security integration tests
+- [ ] End-to-end tests and production deployment hardening
+
+## Release
+- [ ] Installer, service units and upgrade/rollback tooling (last stage)
