@@ -5,6 +5,7 @@ import { prisma } from "../lib/prisma.js";
 import { env } from "../env.js";
 import { requireAdmin } from "../lib/authenticate.js";
 import { listPaymentProviders } from "../billing/registry.js";
+import { encryptNodeCredential } from "../lib/node-credentials.js";
 
 const nodeCreateSchema = z.object({
   name: z.string().trim().min(2).max(64),
@@ -51,17 +52,29 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     if (!admin) return;
     const parsed = nodeCreateSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "Invalid node details", details: parsed.error.flatten() });
+    if (!env.NODE_CREDENTIALS_KEY) {
+      return reply.code(503).send({ error: "Node credential encryption is not configured; set NODE_CREDENTIALS_KEY before registering nodes" });
+    }
     const endpoint = new URL(parsed.data.endpoint).toString().replace(/\/$/, "");
     const duplicate = await prisma.minecraftNode.findFirst({ where: { endpoint }, select: { id: true } });
     if (duplicate) return reply.code(409).send({ error: "A node with this endpoint is already registered" });
 
     const token = randomBytes(32).toString("base64url");
+    const encrypted = encryptNodeCredential(token);
     const node = await prisma.minecraftNode.create({
-      data: { ...parsed.data, endpoint, tokenHash: nodeTokenDigest(token), enabled: false },
+      data: {
+        ...parsed.data,
+        endpoint,
+        tokenHash: nodeTokenDigest(token),
+        tokenCiphertext: encrypted.ciphertext,
+        tokenNonce: encrypted.nonce,
+        tokenAuthTag: encrypted.authTag,
+        enabled: false,
+      },
       select: { id: true, name: true, location: true, endpoint: true, enabled: true, memoryMb: true, diskMb: true, createdAt: true },
     });
     await prisma.auditLog.create({ data: { actorUserId: admin.id, action: "NODE_REGISTERED", targetId: node.id, details: `Registered node ${node.name} at ${node.endpoint}; disabled pending secure agent enrollment` } });
-    // The raw credential is returned once. It is never persisted or included in later list responses.
+    // Raw token is shown once; encrypted copy is retained for authenticated panel-to-agent requests.
     return reply.code(201).send({ node, agentToken: token, warning: "Copy this token now. It will not be shown again. Node remains disabled until mTLS enrollment is implemented." });
   });
 

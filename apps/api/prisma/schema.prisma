@@ -110,7 +110,7 @@ model WalletLedger {
   id          String   @id @default(cuid())
   walletId    String
   amountPaise BigInt
-  currency    String   @default("INR")
+  currency   String   @default("INR")
   kind        String
   reference   String?  @unique
   description String
@@ -133,16 +133,19 @@ model PaymentOrder {
   @@unique([provider, providerOrderId])
 }
 model MinecraftNode {
-  id        String           @id @default(cuid())
-  name      String
-  location  String
-  endpoint  String
-  tokenHash String           @unique
-  enabled   Boolean          @default(false)
-  memoryMb  Int
-  diskMb    Int
-  createdAt DateTime         @default(now())
-  servers   MinecraftServer[]
+  id             String           @id @default(cuid())
+  name           String
+  location       String
+  endpoint       String
+  tokenHash      String           @unique
+  tokenCiphertext String?
+  tokenNonce     String?
+  tokenAuthTag   String?
+  enabled        Boolean          @default(false)
+  memoryMb       Int
+  diskMb         Int
+  createdAt      DateTime         @default(now())
+  servers        MinecraftServer[]
 }
 model MinecraftServer {
   id         String       @id @default(cuid())

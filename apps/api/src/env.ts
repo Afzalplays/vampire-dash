@@ -8,6 +8,7 @@ const schema = z.object({
   WEB_ORIGIN: z.string().url().default("http://localhost:3000"),
   DATABASE_URL: z.string().min(1),
   SESSION_SECRET: z.string().min(32),
+  NODE_CREDENTIALS_KEY: z.string().default(""),
   COOKIE_SECURE: z.enum(["true", "false"]).default("false").transform(v => v === "true"),
   SMTP_HOST: z.string().default(""),
   SMTP_PORT: z.coerce.number().int().min(1).max(65535).default(587),
@@ -23,5 +24,12 @@ export const env = schema.superRefine((value, ctx) => {
   }
   if (value.NODE_ENV === "production" && !value.COOKIE_SECURE) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["COOKIE_SECURE"], message: "COOKIE_SECURE=true is mandatory in production" });
+  }
+  if (value.NODE_CREDENTIALS_KEY) {
+    try {
+      if (Buffer.from(value.NODE_CREDENTIALS_KEY, "base64").length !== 32) throw new Error();
+    } catch {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["NODE_CREDENTIALS_KEY"], message: "NODE_CREDENTIALS_KEY must be base64-encoded 32 random bytes" });
+    }
   }
 }).parse(process.env);

@@ -10,7 +10,8 @@
 
 ## Core platform
 - [x] Admin node registration, one-time bearer-token issuance, audit logging and disable endpoint (mTLS enrollment/rotation still pending)
-- [ ] Panel-side mTLS enrollment, credential rotation and health persistence
+- [x] AES-256-GCM encrypted storage for node-agent bearer credentials
+- [ ] Panel-side mTLS client, node enrollment/rotation and health persistence
 - [ ] Docker capacity accounting and reservation-safe scheduling
 - [ ] Docker provisioning with per-server isolation and strict resource limits
 - [ ] Server lifecycle state machine and reconciliation worker
