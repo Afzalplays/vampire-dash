@@ -1,17 +1,104 @@
 import type { FastifyPluginAsync } from "fastify";
-import { randomBytes,createHash } from "node:crypto";
+import { randomBytes, createHash, randomInt } from "node:crypto";
 import argon2 from "argon2";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { env } from "../env.js";
-const registerSchema=z.object({email:z.string().email().max(254),username:z.string().min(3).max(24).regex(/^[a-zA-Z0-9_]+$/),password:z.string().min(12).max(128)});
-const loginSchema=z.object({email:z.string().email(),password:z.string().min(1).max(128)});
-const cookieName="vd_session";
-const hash=(v:string)=>createHash("sha256").update(v).digest("hex");
-async function issueSession(userId:string){const token=randomBytes(32).toString("base64url");await prisma.session.create({data:{userId,tokenHash:hash(token),expiresAt:new Date(Date.now()+7*86400000)}});return token;}
-export const authRoutes:FastifyPluginAsync=async(app)=>{
- app.post("/register",{config:{rateLimit:{max:5,timeWindow:"1 hour"}}},async(request,reply)=>{const parsed=registerSchema.safeParse(request.body);if(!parsed.success)return reply.code(400).send({error:"Invalid registration details",details:parsed.error.flatten()});const {email,username,password}=parsed.data;const existing=await prisma.user.findFirst({where:{OR:[{email:email.toLowerCase()},{username}]},select:{id:true}});if(existing)return reply.code(409).send({error:"Email or username is already registered"});const passwordHash=await argon2.hash(password,{type:argon2.argon2id,memoryCost:19456,timeCost:2,parallelism:1});try{const user=await prisma.user.create({data:{email:email.toLowerCase(),username,passwordHash,role:"USER",wallet:{create:{currency:"INR"}}},select:{id:true,email:true,username:true,role:true}});const token=await issueSession(user.id);reply.setCookie(cookieName,token,{httpOnly:true,secure:env.COOKIE_SECURE,sameSite:"lax",path:"/",maxAge:7*86400});return reply.code(201).send({user});}catch(error){request.log.warn(error);return reply.code(409).send({error:"Email or username is already registered"});}});
- app.post("/login",{config:{rateLimit:{max:5,timeWindow:"15 minutes"}}},async(request,reply)=>{const parsed=loginSchema.safeParse(request.body);if(!parsed.success)return reply.code(400).send({error:"Invalid login details"});const user=await prisma.user.findUnique({where:{email:parsed.data.email.toLowerCase()}});if(!user||user.status!=="ACTIVE"||!(await argon2.verify(user.passwordHash,parsed.data.password)))return reply.code(401).send({error:"Invalid email or password"});const token=await issueSession(user.id);reply.setCookie(cookieName,token,{httpOnly:true,secure:env.COOKIE_SECURE,sameSite:"lax",path:"/",maxAge:7*86400});return {user:{id:user.id,email:user.email,username:user.username,role:user.role}};});
- app.get("/me",async(request,reply)=>{const token=request.cookies[cookieName];if(!token)return reply.code(401).send({error:"Not authenticated"});const session=await prisma.session.findUnique({where:{tokenHash:hash(token)},include:{user:{select:{id:true,email:true,username:true,role:true,status:true}}}});if(!session||session.expiresAt<new Date()||session.user.status!=="ACTIVE")return reply.code(401).send({error:"Session expired"});return {user:session.user};});
- app.post("/logout",async(request,reply)=>{const token=request.cookies[cookieName];if(token)await prisma.session.deleteMany({where:{tokenHash:hash(token)}});reply.clearCookie(cookieName,{path:"/"});return {ok:true};});
+import { sendMail } from "../lib/mailer.js";
+import { queueEmailNotification } from "../notifications/email.js";
+
+const registerSchema = z.object({ email: z.string().email().max(254), username: z.string().min(3).max(24).regex(/^[a-zA-Z0-9_]+$/), password: z.string().min(12).max(128) });
+const loginSchema = z.object({ email: z.string().email(), password: z.string().min(1).max(128) });
+const otpSchema = z.object({ email: z.string().email().max(254), otp: z.string().regex(/^\d{6}$/) });
+const cookieName = "vd_session";
+const hash = (v: string) => createHash("sha256").update(v).digest("hex");
+async function issueSession(userId: string) {
+  const token = randomBytes(32).toString("base64url");
+  await prisma.session.create({ data: { userId, tokenHash: hash(token), expiresAt: new Date(Date.now() + 7 * 86400000) } });
+  return token;
+}
+async function issueEmailOtp(userId: string, email: string) {
+  const otp = String(randomInt(100000, 1000000));
+  await prisma.emailVerificationCode.deleteMany({ where: { userId } });
+  await prisma.emailVerificationCode.create({ data: { userId, codeHash: hash(otp), expiresAt: new Date(Date.now() + 10 * 60_000) } });
+  await sendMail({ to: email, subject: "Verify your Vampire Dash email", text: `Your verification code is ${otp}. It expires in 10 minutes. If you did not request this, ignore this email.` });
+}
+export const authRoutes: FastifyPluginAsync = async (app) => {
+  app.post("/register", { config: { rateLimit: { max: 5, timeWindow: "1 hour" } } }, async (request, reply) => {
+    const parsed = registerSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid registration details", details: parsed.error.flatten() });
+    const { email, username, password } = parsed.data;
+    const normalizedEmail = email.toLowerCase();
+    const existing = await prisma.user.findFirst({ where: { OR: [{ email: normalizedEmail }, { username }] }, select: { id: true } });
+    if (existing) return reply.code(409).send({ error: "Email or username is already registered" });
+    const passwordHash = await argon2.hash(password, { type: argon2.argon2id, memoryCost: 19456, timeCost: 2, parallelism: 1 });
+    try {
+      const user = await prisma.user.create({ data: { email: normalizedEmail, username, passwordHash, role: "USER", wallet: { create: { currency: "INR" } } }, select: { id: true, email: true } });
+      try {
+        await issueEmailOtp(user.id, user.email);
+      } catch (error) {
+        await prisma.user.delete({ where: { id: user.id } });
+        request.log.error(error);
+        return reply.code(503).send({ error: "Could not send verification email. Check SMTP configuration and try again." });
+      }
+      return reply.code(201).send({ verificationRequired: true, message: "A 6-digit verification code was sent to your email." });
+    } catch (error) {
+      request.log.warn(error);
+      return reply.code(409).send({ error: "Email or username is already registered" });
+    }
+  });
+
+  app.post("/verify-email", { config: { rateLimit: { max: 8, timeWindow: "15 minutes" } } }, async (request, reply) => {
+    const parsed = otpSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: "Enter a valid email and 6-digit code" });
+    const user = await prisma.user.findUnique({ where: { email: parsed.data.email.toLowerCase() } });
+    if (!user) return reply.code(400).send({ error: "Invalid or expired verification code" });
+    if (user.emailVerifiedAt) return reply.code(400).send({ error: "Email is already verified" });
+    const record = await prisma.emailVerificationCode.findFirst({ where: { userId: user.id }, orderBy: { createdAt: "desc" } });
+    if (!record || record.expiresAt < new Date() || record.attempts >= 5 || record.codeHash !== hash(parsed.data.otp)) {
+      if (record && record.attempts < 5) await prisma.emailVerificationCode.update({ where: { id: record.id }, data: { attempts: { increment: 1 } } });
+      return reply.code(400).send({ error: "Invalid or expired verification code" });
+    }
+    await prisma.$transaction([
+      prisma.user.update({ where: { id: user.id }, data: { emailVerifiedAt: new Date() } }),
+      prisma.emailVerificationCode.deleteMany({ where: { userId: user.id } }),
+    ]);
+    const token = await issueSession(user.id);
+    reply.setCookie(cookieName, token, { httpOnly: true, secure: env.COOKIE_SECURE, sameSite: "lax", path: "/", maxAge: 7 * 86400 });
+    return { verified: true, user: { id: user.id, email: user.email, username: user.username, role: user.role } };
+  });
+
+  app.post("/resend-verification", { config: { rateLimit: { max: 3, timeWindow: "1 hour" } } }, async (request, reply) => {
+    const parsed = z.object({ email: z.string().email() }).safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid email" });
+    const user = await prisma.user.findUnique({ where: { email: parsed.data.email.toLowerCase() } });
+    if (user && !user.emailVerifiedAt) await issueEmailOtp(user.id, user.email);
+    return { message: "If the account needs verification, a new code has been sent." };
+  });
+
+  app.post("/login", { config: { rateLimit: { max: 5, timeWindow: "15 minutes" } } }, async (request, reply) => {
+    const parsed = loginSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid login details" });
+    const user = await prisma.user.findUnique({ where: { email: parsed.data.email.toLowerCase() } });
+    if (!user || user.status !== "ACTIVE" || !(await argon2.verify(user.passwordHash, parsed.data.password))) return reply.code(401).send({ error: "Invalid email or password" });
+    if (!user.emailVerifiedAt) return reply.code(403).send({ error: "Please verify your email before signing in", verificationRequired: true });
+    const token = await issueSession(user.id);
+    reply.setCookie(cookieName, token, { httpOnly: true, secure: env.COOKIE_SECURE, sameSite: "lax", path: "/", maxAge: 7 * 86400 });
+    return { user: { id: user.id, email: user.email, username: user.username, role: user.role } };
+  });
+
+  app.get("/me", async (request, reply) => {
+    const token = request.cookies[cookieName];
+    if (!token) return reply.code(401).send({ error: "Not authenticated" });
+    const session = await prisma.session.findUnique({ where: { tokenHash: hash(token) }, include: { user: { select: { id: true, email: true, username: true, role: true, status: true, emailVerifiedAt: true } } } });
+    if (!session || session.expiresAt < new Date() || session.user.status !== "ACTIVE" || !session.user.emailVerifiedAt) return reply.code(401).send({ error: "Session expired" });
+    return { user: session.user };
+  });
+
+  app.post("/logout", async (request, reply) => {
+    const token = request.cookies[cookieName];
+    if (token) await prisma.session.deleteMany({ where: { tokenHash: hash(token) } });
+    reply.clearCookie(cookieName, { path: "/" });
+    return { ok: true };
+  });
 };

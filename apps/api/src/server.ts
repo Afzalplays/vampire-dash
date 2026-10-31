@@ -9,6 +9,7 @@ import { healthRoutes } from "./routes/health.js";
 import { authRoutes } from "./routes/auth.js";
 import { billingRoutes } from "./routes/billing.js";
 import { adminRoutes } from "./routes/admin.js";
+import { notificationRoutes } from "./routes/notifications.js";
 
 const app = Fastify({ logger: true, trustProxy: false, bodyLimit: 1024 * 1024 });
 await app.register(helmet);
@@ -20,13 +21,12 @@ await app.register(healthRoutes, { prefix: "/api/health" });
 await app.register(authRoutes, { prefix: "/api/auth" });
 await app.register(billingRoutes, { prefix: "/api/billing" });
 await app.register(adminRoutes, { prefix: "/api/admin" });
+await app.register(notificationRoutes, { prefix: "/api/notifications" });
 
 app.setErrorHandler((error, request, reply) => {
   request.log.error(error);
-  const statusCode = typeof error === "object" && error !== null && "statusCode" in error && typeof error.statusCode === "number"
-    ? error.statusCode : 500;
+  const statusCode = typeof error === "object" && error !== null && "statusCode" in error && typeof error.statusCode === "number" ? error.statusCode : 500;
   const message = statusCode < 500 && error instanceof Error ? error.message : "Internal server error";
   reply.code(statusCode).send({ error: message });
 });
-
 await app.listen({ host: env.API_HOST, port: env.API_PORT });

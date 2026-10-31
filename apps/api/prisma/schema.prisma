@@ -7,23 +7,10 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum UserRole {
-  USER
-  ADMIN
-}
-
-enum AccountStatus {
-  ACTIVE
-  SUSPENDED
-}
-
-enum PaymentStatus {
-  PENDING
-  PAID
-  FAILED
-  EXPIRED
-  REFUNDED
-}
+enum UserRole { USER ADMIN }
+enum AccountStatus { ACTIVE SUSPENDED }
+enum PaymentStatus { PENDING PAID FAILED EXPIRED REFUNDED }
+enum EmailDeliveryStatus { PENDING SENT FAILED }
 
 model User {
   id                  String        @id @default(cuid())
@@ -41,6 +28,49 @@ model User {
   servers             MinecraftServer[]
   wallet              Wallet?
   auditEvents         AuditLog[]    @relation("AuditActor")
+  emailVerificationCodes EmailVerificationCode[]
+  emailNotifications  EmailNotification[]
+  notificationPreference NotificationPreference?
+}
+
+model EmailVerificationCode {
+  id        String   @id @default(cuid())
+  userId    String
+  codeHash  String
+  attempts  Int      @default(0)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, expiresAt])
+}
+
+model EmailNotification {
+  id         String @id @default(cuid())
+  userId     String
+  recipient  String
+  event      String
+  subject    String
+  bodyText   String
+  status     EmailDeliveryStatus @default(PENDING)
+  attempts   Int @default(0)
+  lastError  String?
+  dedupeKey  String? @unique
+  createdAt  DateTime @default(now())
+  sentAt     DateTime?
+  user       User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+}
+
+model NotificationPreference {
+  id             String @id @default(cuid())
+  userId         String @unique
+  emailEnabled   Boolean @default(true)
+  serverAlerts   Boolean @default(true)
+  billingAlerts  Boolean @default(true)
+  securityAlerts Boolean @default(true)
+  updatedAt      DateTime @updatedAt
+  user           User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Session {
@@ -52,7 +82,6 @@ model Session {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@index([userId, expiresAt])
 }
-
 model Wallet {
   id          String         @id @default(cuid())
   userId      String         @unique
@@ -61,7 +90,6 @@ model Wallet {
   user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   ledger      WalletLedger[]
 }
-
 model WalletLedger {
   id          String   @id @default(cuid())
   walletId    String
@@ -74,7 +102,6 @@ model WalletLedger {
   wallet      Wallet   @relation(fields: [walletId], references: [id], onDelete: Restrict)
   @@index([walletId, createdAt])
 }
-
 model PaymentOrder {
   id              String        @id @default(cuid())
   userId          String
@@ -89,7 +116,6 @@ model PaymentOrder {
   @@index([userId, createdAt])
   @@unique([provider, providerOrderId])
 }
-
 model MinecraftNode {
   id        String           @id @default(cuid())
   name      String
@@ -102,24 +128,22 @@ model MinecraftNode {
   createdAt DateTime         @default(now())
   servers   MinecraftServer[]
 }
-
 model MinecraftServer {
-  id        String       @id @default(cuid())
-  ownerId   String
-  nodeId    String?
-  name      String
-  software  String
-  version   String
-  memoryMb  Int
-  diskMb    Int
+  id         String       @id @default(cuid())
+  ownerId    String
+  nodeId     String?
+  name       String
+  software   String
+  version    String
+  memoryMb   Int
+  diskMb     Int
   cpuPercent Int
-  status    String       @default("PENDING")
-  createdAt DateTime     @default(now())
-  owner     User         @relation(fields: [ownerId], references: [id], onDelete: Restrict)
-  node      MinecraftNode? @relation(fields: [nodeId], references: [id], onDelete: SetNull)
+  status     String       @default("PENDING")
+  createdAt  DateTime     @default(now())
+  owner      User         @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  node       MinecraftNode? @relation(fields: [nodeId], references: [id], onDelete: SetNull)
   @@index([ownerId, createdAt])
 }
-
 model AuditLog {
   id          String   @id @default(cuid())
   actorUserId String?
