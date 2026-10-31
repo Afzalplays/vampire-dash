@@ -9,15 +9,24 @@ import { healthRoutes } from "./routes/health.js";
 import { authRoutes } from "./routes/auth.js";
 import { billingRoutes } from "./routes/billing.js";
 import { adminRoutes } from "./routes/admin.js";
-const app=Fastify({logger:true,trustProxy:false,bodyLimit:1024*1024});
+
+const app = Fastify({ logger: true, trustProxy: false, bodyLimit: 1024 * 1024 });
 await app.register(helmet);
-await app.register(cors,{origin:env.WEB_ORIGIN,credentials:true});
-await app.register(cookie,{secret:env.SESSION_SECRET});
-await app.register(rateLimit,{max:100,timeWindow:"1 minute"});
+await app.register(cors, { origin: env.WEB_ORIGIN, credentials: true });
+await app.register(cookie, { secret: env.SESSION_SECRET });
+await app.register(rateLimit, { max: 100, timeWindow: "1 minute" });
 await app.register(sensible);
-await app.register(healthRoutes,{prefix:"/api/health"});
-await app.register(authRoutes,{prefix:"/api/auth"});
-await app.register(billingRoutes,{prefix:"/api/billing"});
-await app.register(adminRoutes,{prefix:"/api/admin"});
-app.setErrorHandler((error,request,reply)=>{request.log.error(error);reply.code(error.statusCode??500).send({error:error.statusCode&&error.statusCode<500?error.message:"Internal server error"});});
-await app.listen({host:env.API_HOST,port:env.API_PORT});
+await app.register(healthRoutes, { prefix: "/api/health" });
+await app.register(authRoutes, { prefix: "/api/auth" });
+await app.register(billingRoutes, { prefix: "/api/billing" });
+await app.register(adminRoutes, { prefix: "/api/admin" });
+
+app.setErrorHandler((error, request, reply) => {
+  request.log.error(error);
+  const statusCode = typeof error === "object" && error !== null && "statusCode" in error && typeof error.statusCode === "number"
+    ? error.statusCode : 500;
+  const message = statusCode < 500 && error instanceof Error ? error.message : "Internal server error";
+  reply.code(statusCode).send({ error: message });
+});
+
+await app.listen({ host: env.API_HOST, port: env.API_PORT });
