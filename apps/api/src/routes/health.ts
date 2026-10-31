@@ -10,7 +10,7 @@ export const healthRoutes: FastifyPluginAsync = async (app) => {
 
   app.get("/ready", async (_request, reply) => {
     try {
-      await prisma.$queryRaw\`SELECT 1\`;
+      await prisma.$queryRawUnsafe("SELECT 1");
       return { status: "ready" };
     } catch {
       return reply.code(503).send({ status: "not_ready" });
