@@ -12,7 +12,8 @@
 - [x] Admin node registration, one-time bearer-token issuance, audit logging and disable endpoint (mTLS enrollment/rotation still pending)
 - [x] AES-256-GCM encrypted storage for node-agent bearer credentials
 - [x] Panel-side mTLS client for authenticated read-only node telemetry and admin health checks
-- [ ] Automated node enrollment/rotation and scheduled health polling
+- [x] Scheduled node health polling with PostgreSQL advisory-lock coordination and transition-only audit events
+- [ ] Automated node enrollment/rotation
 - [ ] Docker capacity accounting and reservation-safe scheduling
 - [ ] Docker provisioning with per-server isolation and strict resource limits
 - [ ] Server lifecycle state machine and reconciliation worker

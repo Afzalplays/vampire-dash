@@ -13,6 +13,7 @@ const schema = z.object({
   NODE_AGENT_CLIENT_CERT_FILE: z.string().default(""),
   NODE_AGENT_CLIENT_KEY_FILE: z.string().default(""),
   NODE_AGENT_TIMEOUT_MS: z.coerce.number().int().min(1000).max(30000).default(5000),
+  NODE_HEALTH_INTERVAL_MS: z.coerce.number().int().min(15000).max(600000).default(60000),
   COOKIE_SECURE: z.enum(["true", "false"]).default("false").transform(v => v === "true"),
   SMTP_HOST: z.string().default(""),
   SMTP_PORT: z.coerce.number().int().min(1).max(65535).default(587),
