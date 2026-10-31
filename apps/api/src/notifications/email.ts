@@ -27,10 +27,30 @@ const templates: Record<NotificationEvent, (data: Record<string, string>) => { s
 export async function queueEmailNotification(userId: string, event: NotificationEvent, data: Record<string, string> = {}, dedupeKey?: string) {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
   if (!user) throw new Error("Notification recipient not found");
+  const preferences = await prisma.notificationPreference.findUnique({ where: { userId } });
+  const isServerEvent = event.startsWith("SERVER_");
+  const isBillingEvent = event.startsWith("PAYMENT_");
+  if (preferences?.emailEnabled === false ||
+      (isServerEvent && preferences?.serverAlerts === false) ||
+      (isBillingEvent && preferences?.billingAlerts === false) ||
+      (event === "SECURITY_ALERT" && preferences?.securityAlerts === false)) return;
   const template = templates[event](data);
-  const row = await prisma.emailNotification.create({
-    data: { userId, recipient: user.email, event, subject: template.subject, bodyText: template.text, dedupeKey },
-  });
+  if (dedupeKey) {
+    const existing = await prisma.emailNotification.findUnique({ where: { dedupeKey } });
+    if (existing?.status === "SENT") return;
+    if (existing) {
+      await prisma.emailNotification.update({ where: { id: existing.id }, data: { status: "PENDING", lastError: null } });
+    }
+  }
+  const row = dedupeKey
+    ? await prisma.emailNotification.upsert({
+        where: { dedupeKey },
+        create: { userId, recipient: user.email, event, subject: template.subject, bodyText: template.text, dedupeKey },
+        update: { status: "PENDING", attempts: { increment: 1 }, lastError: null },
+      })
+    : await prisma.emailNotification.create({
+        data: { userId, recipient: user.email, event, subject: template.subject, bodyText: template.text },
+      });
   try {
     await sendMail({ to: row.recipient, subject: row.subject, text: row.bodyText });
     await prisma.emailNotification.update({ where: { id: row.id }, data: { status: "SENT", sentAt: new Date() } });

@@ -155,6 +155,7 @@ model MinecraftServer {
   diskMb     Int
   cpuPercent Int
   status     String       @default("PENDING")
+  expiresAt  DateTime?
   createdAt  DateTime     @default(now())
   owner      User         @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   node       MinecraftNode? @relation(fields: [nodeId], references: [id], onDelete: SetNull)

@@ -19,15 +19,14 @@ For implicit TLS (commonly port 465), set SMTP_SECURE=true. Use a real provider 
 
 ## Notification events
 
-The email notification service includes templates for:
-- Server created
-- Server expiry in 7 days and 1 day
-- Server suspended or restored
-- Payment received or failed
-- Password changed and security alerts
+Templates are available for server created, expiry in 7 days and 1 day, suspended/restored, payment received/failed, password changed and security alerts. User preferences are available through `GET/PATCH /api/notifications/preferences`.
 
-Users can read and update email notification preferences at `GET/PATCH /api/notifications/preferences`. Email delivery is performed server-side.
+## Expiry worker
+
+Run `npm run worker:expiry --workspace @vampire-dash/api` as a separate supervised process. It scans hourly for servers with an `expiresAt` timestamp, sends one 7-day or 1-day reminder per server/event, and uses a unique dedupe key to avoid duplicate reminders. The worker starts with an immediate scan. Ensure the process is supervised by systemd, Docker restart policy or another process manager.
+
+The notification service checks each user's email and event preferences. Delivery status and errors are recorded in the database. SMTP must be configured for delivery.
 
 ## Remaining production work
 
-The event templates and send service are starter infrastructure. Server lifecycle, billing and security code must call the notification service at the relevant transaction boundary. A durable retrying queue, scheduled expiry scanner (7-day/1-day reminders), delivery monitoring, bounce handling and integration tests are still required before relying on these messages for customer operations.
+The worker is an initial scheduler, not a durable queue. Add bounded retries/backoff, bounce handling, delivery monitoring, lifecycle event wiring for server create/suspend/restore, and integration tests before relying on email for critical customer operations. The worker must be run in production; it is not started automatically by the web/API process.
