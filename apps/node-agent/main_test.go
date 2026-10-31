@@ -5,7 +5,7 @@ import (
  "net/http/httptest"
  "testing"
 )
-func TestHealthIsPublic(t *testing.T) {
+func TestHealthHandler(t *testing.T) {
  h:=newHandler(config{NodeID:"node-test",AgentToken:"01234567890123456789012345678901"})
  w:=httptest.NewRecorder(); h.ServeHTTP(w,httptest.NewRequest(http.MethodGet,"/health",nil))
  if w.Code!=http.StatusOK { t.Fatalf("want 200, got %d",w.Code) }
@@ -21,4 +21,9 @@ func TestNodeStatusAcceptsToken(t *testing.T) {
  r:=httptest.NewRequest(http.MethodGet,"/v1/node/status",nil); r.Header.Set("Authorization","Bearer "+token)
  w:=httptest.NewRecorder(); h.ServeHTTP(w,r)
  if w.Code!=http.StatusOK { t.Fatalf("want 200, got %d",w.Code) }
+}
+func TestTLSRequiresClientCertificate(t *testing.T) {
+ c:=tlsTestConfig()
+ if c.ClientAuth != tls.RequireAndVerifyClientCert { t.Fatal("client certificate must be mandatory") }
+ if c.MinVersion < tls.VersionTLS12 { t.Fatal("TLS 1.2 or newer must be required") }
 }
