@@ -1,0 +1,17 @@
+import type { FastifyPluginAsync } from "fastify";
+import { randomBytes,createHash } from "node:crypto";
+import argon2 from "argon2";
+import { z } from "zod";
+import { prisma } from "../lib/prisma.js";
+import { env } from "../env.js";
+const registerSchema=z.object({email:z.string().email().max(254),username:z.string().min(3).max(24).regex(/^[a-zA-Z0-9_]+$/),password:z.string().min(12).max(128)});
+const loginSchema=z.object({email:z.string().email(),password:z.string().min(1).max(128)});
+const cookieName="vd_session";
+const hash=(v:string)=>createHash("sha256").update(v).digest("hex");
+async function issueSession(userId:string){const token=randomBytes(32).toString("base64url");await prisma.session.create({data:{userId,tokenHash:hash(token),expiresAt:new Date(Date.now()+7*86400000)}});return token;}
+export const authRoutes:FastifyPluginAsync=async(app)=>{
+ app.post("/register",async(request,reply)=>{const parsed=registerSchema.safeParse(request.body);if(!parsed.success)return reply.code(400).send({error:"Invalid registration details",details:parsed.error.flatten()});const {email,username,password}=parsed.data;const existing=await prisma.user.findFirst({where:{OR:[{email:email.toLowerCase()},{username}]},select:{id:true}});if(existing)return reply.code(409).send({error:"Email or username is already registered"});const passwordHash=await argon2.hash(password,{type:argon2.argon2id,memoryCost:19456,timeCost:2,parallelism:1});const user=await prisma.user.create({data:{email:email.toLowerCase(),username,passwordHash,role:"USER",wallet:{create:{currency:"INR"}}},select:{id:true,email:true,username:true,role:true}});const token=await issueSession(user.id);reply.setCookie(cookieName,token,{httpOnly:true,secure:env.COOKIE_SECURE,sameSite:"lax",path:"/",maxAge:7*86400});return reply.code(201).send({user});});
+ app.post("/login",async(request,reply)=>{const parsed=loginSchema.safeParse(request.body);if(!parsed.success)return reply.code(400).send({error:"Invalid login details"});const user=await prisma.user.findUnique({where:{email:parsed.data.email.toLowerCase()}});if(!user||user.status!=="ACTIVE"||!(await argon2.verify(user.passwordHash,parsed.data.password)))return reply.code(401).send({error:"Invalid email or password"});const token=await issueSession(user.id);reply.setCookie(cookieName,token,{httpOnly:true,secure:env.COOKIE_SECURE,sameSite:"lax",path:"/",maxAge:7*86400});return {user:{id:user.id,email:user.email,username:user.username,role:user.role}};});
+ app.get("/me",async(request,reply)=>{const token=request.cookies[cookieName];if(!token)return reply.code(401).send({error:"Not authenticated"});const session=await prisma.session.findUnique({where:{tokenHash:hash(token)},include:{user:{select:{id:true,email:true,username:true,role:true,status:true}}}});if(!session||session.expiresAt<new Date()||session.user.status!=="ACTIVE")return reply.code(401).send({error:"Session expired"});return {user:session.user};});
+ app.post("/logout",async(request,reply)=>{const token=request.cookies[cookieName];if(token)await prisma.session.deleteMany({where:{tokenHash:hash(token)}});reply.clearCookie(cookieName,{path:"/"});return {ok:true};});
+};
