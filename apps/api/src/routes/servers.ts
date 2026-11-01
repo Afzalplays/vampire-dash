@@ -15,7 +15,7 @@ const serverSelect = {
   status: true,
   expiresAt: true,
   createdAt: true,
-  node: { select: { name: true, location: true, healthStatus: true, lastSeenAt: true } },
+  node: { select: { name: true, location: true, minecraftAddress: true, healthStatus: true, lastSeenAt: true } },
   allocation: { select: { port: true, protocol: true } },
 } as const;
 
