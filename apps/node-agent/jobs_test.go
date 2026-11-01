@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"testing"
+	"strings"
 	"time"
 )
 
@@ -36,6 +37,25 @@ func TestValidateSignedPropertiesJob(t *testing.T) {
 	if _, err := validateSignedNodeJob(body, signJob(body), jobTestSecret, "node-a", now); err != nil { t.Fatal(err) }
 }
 
+func TestValidateSignedProvisionServerJob(t *testing.T) {
+ now:=time.Now().UTC()
+ image:="itzg/minecraft-server@sha256:"+strings.Repeat("a",64)
+ payload:=fmt.Sprintf(`{"name":"Survival","software":"PAPER","minecraftVersion":"1.21.1","dockerImage":%q,"javaMajor":21,"memoryMb":2048,"diskMb":10240,"cpuPercent":200,"port":25565}`,image)
+ body:=signedJobBody(now,"PROVISION_SERVER",payload)
+ job,err:=validateSignedNodeJob(body,signJob(body),jobTestSecret,"node-a",now)
+ if err!=nil {t.Fatal(err)}
+ if job.Action!="PROVISION_SERVER" {t.Fatalf("unexpected action: %s",job.Action)}
+}
+
+func TestRejectUnsafeProvisionServerJobs(t *testing.T) {
+ now:=time.Now().UTC()
+ cases:=[]string{
+  `{"name":"Survival","software":"PAPER","minecraftVersion":"1.21.1","dockerImage":"itzg/minecraft-server:latest","javaMajor":21,"memoryMb":2048,"diskMb":10240,"cpuPercent":200,"port":25565}`,
+  `{"name":"Survival","software":"BEDROCK","minecraftVersion":"1.21.1","dockerImage":"itzg/minecraft-server@sha256:`+strings.Repeat("a",64)+`","javaMajor":21,"memoryMb":2048,"diskMb":10240,"cpuPercent":200,"port":25565}`,
+  `{"name":"Survival","software":"PAPER","minecraftVersion":"1.21.1","dockerImage":"itzg/minecraft-server@sha256:`+strings.Repeat("a",64)+`","javaMajor":21,"memoryMb":128,"diskMb":10240,"cpuPercent":200,"port":25565}`,
+ }
+ for _,payload:=range cases { body:=signedJobBody(now,"PROVISION_SERVER",payload); if _,err:=validateSignedNodeJob(body,signJob(body),jobTestSecret,"node-a",now);err==nil {t.Fatalf("expected unsafe provision payload rejection: %s",payload)} }
+}
 func TestRejectTamperedOrWrongNodeJob(t *testing.T) {
 	now := time.Now().UTC()
 	body := signedJobBody(now, "STOP", `{}`)
