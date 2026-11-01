@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 
-type Server = {id:string;name:string;software:string;version:string;memoryMb:number;diskMb:number;cpuPercent:number;status:string;expiresAt:string|null;allocation:{port:number;protocol:string}|null;node:{name:string;location:string;healthStatus:string;lastSeenAt:string|null}|null;access:{role:string;permissions:Record<string,boolean>}};
+type Server = {id:string;name:string;software:string;version:string;memoryMb:number;diskMb:number;cpuPercent:number;status:string;expiresAt:string|null;allocation:{port:number;protocol:string}|null;node:{name:string;location:string;minecraftAddress:string|null;healthStatus:string;lastSeenAt:string|null}|null;access:{role:string;permissions:Record<string,boolean>}};
 type Operation = {id:string;type:string;status:string;payload:unknown;errorMessage:string|null;createdAt:string;startedAt:string|null;finishedAt:string|null};
 async function api<T>(path:string,init?:RequestInit):Promise<T>{const r=await fetch(`/api${path}`,{...init,credentials:"include",headers:{"Content-Type":"application/json",...(init?.headers??{})}});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||`Request failed (${r.status})`);return d as T;}
 const box:React.CSSProperties={background:"#14141b",border:"1px solid #292933",borderRadius:12,padding:20};
