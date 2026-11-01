@@ -15,6 +15,7 @@ const nodeCreateSchema = z.object({
     try { const url = new URL(value); return url.protocol === "https:" && !url.username && !url.password && !url.search && !url.hash; }
     catch { return false; }
   }, "Node endpoint must be an HTTPS URL without credentials, query, or fragment"),
+  minecraftAddress: z.string().trim().min(1).max(255).regex(/^[A-Za-z0-9.-]+$/).optional(),
   memoryMb: z.number().int().positive().max(4_194_304),
   diskMb: z.number().int().positive().max(16_777_216),
   allocationStart: z.number().int().min(1024).max(65535).default(25565),
