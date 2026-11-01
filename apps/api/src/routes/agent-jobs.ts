@@ -49,12 +49,18 @@ export const agentJobRoutes: FastifyPluginAsync = async (app) => {
         where: { id: params.data.jobId, nodeId: node.id },
         select: { id: true, status: true, leaseTokenHash: true, leaseExpiresAt: true, operationId: true },
       });
-      if (!job || job.status !== "LEASED" || !job.leaseTokenHash || !job.leaseExpiresAt) return "NOT_FOUND";
+      if (!job || !["LEASED", "ACKNOWLEDGED"].includes(job.status) || !job.leaseTokenHash || !job.leaseExpiresAt) return "NOT_FOUND";
       const storedHash = Buffer.from(job.leaseTokenHash, "hex");
       if (storedHash.length !== suppliedHash.length || !timingSafeEqual(storedHash, suppliedHash)) return "INVALID_LEASE";
-      if (job.leaseExpiresAt <= new Date()) return "EXPIRED";
+      const now = new Date();
+      if (job.leaseExpiresAt <= now) return "EXPIRED";
+
+      // ACK is idempotent for the same live lease. A node may retry after a
+      // network timeout without causing a second state transition.
+      if (job.status === "ACKNOWLEDGED") return "ACKNOWLEDGED";
+
       const updated = await tx.nodeAgentJob.updateMany({
-        where: { id: job.id, nodeId: node.id, status: "LEASED", leaseTokenHash: job.leaseTokenHash, leaseExpiresAt: { gt: new Date() } },
+        where: { id: job.id, nodeId: node.id, status: "LEASED", leaseTokenHash: job.leaseTokenHash, leaseExpiresAt: { gt: now } },
         data: { status: "ACKNOWLEDGED", lastErrorCode: null, lastError: null },
       });
       if (updated.count !== 1) return "CONFLICT";

@@ -3,7 +3,7 @@
 The panel provides node-scoped claim, acknowledgement, lease renewal and result endpoints under `/api/agent/jobs`.
 
 - Claim: `POST /claim` returns an allowlisted typed envelope, exact UTF-8 signed body, HMAC-SHA256 signature and one-time lease token. A node can claim only its own pending jobs.
-- Acknowledgement: `POST /:jobId/ack` proves possession of the lease token and transitions the operation to RUNNING. The lease remains attached to the job.
+- Acknowledgement: `POST /:jobId/ack` proves possession of the lease token and transitions the operation to RUNNING. The lease remains attached to the job. Repeating ACK with the same lease token while the lease is live returns the same ACKNOWLEDGED response; a different token or expired lease is rejected.
 - Renewal: `POST /:jobId/renew` extends a live LEASED or ACKNOWLEDGED lease by 90 seconds. The agent must renew before expiry.
 - Result: `POST /:jobId/result` accepts SUCCEEDED or FAILED from an acknowledged job and updates the operation atomically.
 - Lease tokens are random 256-bit values; only SHA-256 hashes are stored. Comparisons use constant-time equality. Result payloads are capped at 8 KiB.
