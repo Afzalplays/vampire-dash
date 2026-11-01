@@ -17,7 +17,7 @@
 - [ ] Automated node enrollment/rotation
 - [ ] Connect reservations to customer server creation and server lifecycle transitions
 - [x] Durable idempotent server-operation queue schema for software and utility actions
-- [x] Owner-only idempotent operation request/history API for lifecycle and allowlisted properties (queue only; dispatch pending)
+- [x] Owner and permission-scoped subuser operation request/history API (queue only; dispatch pending)
 - [ ] Customer server creation API with entitlement/quota enforcement and reservation consumption
 - [ ] Provisioning outbox dispatcher and secure node-agent job protocol
 - [ ] Operation worker, retries, cancellation and reconciliation
@@ -29,7 +29,8 @@
 - [ ] Backup, restore and scheduled retention
 
 ## Customer and admin experience
-- [x] Owner-managed server subusers with granular permissions and audited access revocation (available to free server owners)\n- [ ] Customer server list and server detail views backed by API
+- [x] Owner-managed server subusers with granular permissions and audited access revocation (available to free server owners)
+- [ ] Customer server list and server detail views backed by API
 - [ ] Admin node, allocation, user and server management
 - [x] Database-backed plan catalogue and customer entitlement read APIs
 - [ ] Admin plan CRUD UI and plan purchase/renewal flow
@@ -40,7 +41,7 @@
 - [ ] Plugin installer with trusted provider metadata and checksums
 - [ ] Mod installer for Fabric/Forge/NeoForge with dependency checks
 - [ ] Modpack installer with pinned manifests and rollback
-- [ ] Server utilities: properties, EULA, Java/runtime, schedules, backups, logs, ports and diagnostics
+- [ ] Server utilities: properties, EULA, schedules, backups, logs, ports and diagnostics
 - [ ] Customer-facing operation history and progress UI
 
 ## Billing and security
