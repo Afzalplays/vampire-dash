@@ -15,6 +15,7 @@ const serverSelect = {
   expiresAt: true,
   createdAt: true,
   node: { select: { name: true, location: true, healthStatus: true, lastSeenAt: true } },
+  allocation: { select: { port: true, protocol: true } },
 } as const;
 
 export const serverRoutes: FastifyPluginAsync = async (app) => {
@@ -62,16 +63,26 @@ export const serverRoutes: FastifyPluginAsync = async (app) => {
         for (const candidate of candidates) {
           const node = await tx.minecraftNode.findUnique({ where: { id: candidate.id }, select: {
             id: true, name: true, memoryMb: true, diskMb: true, memoryOverheadMb: true, diskOverheadMb: true,
+            cpuCores: true, allocationStart: true, allocationEnd: true,
           } });
           if (!node) continue;
-          const [allocated, held] = await Promise.all([
-            tx.minecraftServer.aggregate({ where: { nodeId: node.id, status: { notIn: ["DELETED", "ERROR"] } }, _sum: { memoryMb: true, diskMb: true } }),
+          const [allocated, held, usedPorts] = await Promise.all([
+            tx.minecraftServer.aggregate({ where: { nodeId: node.id, status: { notIn: ["DELETED", "ERROR"] } }, _sum: { memoryMb: true, diskMb: true, cpuPercent: true } }),
             tx.nodeCapacityReservation.aggregate({ where: { nodeId: node.id, status: "ACTIVE", expiresAt: { gt: now } }, _sum: { memoryMb: true, diskMb: true } }),
+            tx.nodePortAllocation.findMany({ where: { nodeId: node.id, protocol: "TCP", port: { gte: node.allocationStart, lte: node.allocationEnd } }, select: { port: true } }),
           ]);
           const ramUsed = (allocated._sum.memoryMb ?? 0) + (held._sum.memoryMb ?? 0);
           const diskUsed = (allocated._sum.diskMb ?? 0) + (held._sum.diskMb ?? 0);
-          if (ramUsed + entitlement.plan.memoryMb > node.memoryMb - node.memoryOverheadMb ||
-              diskUsed + entitlement.plan.diskMb > node.diskMb - node.diskOverheadMb) continue;
+          const cpuUsed = allocated._sum.cpuPercent ?? 0;
+          if (node.cpuCores === null || ramUsed + entitlement.plan.memoryMb > node.memoryMb - node.memoryOverheadMb ||
+              diskUsed + entitlement.plan.diskMb > node.diskMb - node.diskOverheadMb ||
+              cpuUsed + entitlement.plan.cpuPercent > node.cpuCores * 100) continue;
+          const occupiedPorts = new Set(usedPorts.map((allocation) => allocation.port));
+          let allocatedPort: number | null = null;
+          for (let port = node.allocationStart; port <= node.allocationEnd; port += 1) {
+            if (!occupiedPorts.has(port)) { allocatedPort = port; break; }
+          }
+          if (allocatedPort === null) continue;
 
           const server = await tx.minecraftServer.create({ data: {
             ownerId: user.id, nodeId: node.id, name: parsed.data.name, software: parsed.data.software,
@@ -79,9 +90,10 @@ export const serverRoutes: FastifyPluginAsync = async (app) => {
             cpuPercent: entitlement.plan.cpuPercent, status: "PENDING",
             expiresAt: entitlement.expiresAt,
           }, select: serverSelect });
+          await tx.nodePortAllocation.create({ data: { nodeId: node.id, serverId: server.id, port: allocatedPort, protocol: "TCP" } });
           await tx.auditLog.create({ data: {
             actorUserId: user.id, action: "SERVER_CREATED", targetId: server.id,
-            details: `Created server ${server.name} on node ${node.name} using entitlement ${entitlement.id}; provisioning is pending`,
+            details: `Created server ${server.name} on node ${node.name} using entitlement ${entitlement.id}; reserved TCP port ${allocatedPort}; provisioning is pending`,
           } });
           return server;
         }
@@ -94,7 +106,7 @@ export const serverRoutes: FastifyPluginAsync = async (app) => {
       if (code === "SERVER_NAME_IN_USE") return reply.code(409).send({ error: "A server with this name already exists" });
       if (code === "SERVER_SLOT_LIMIT") return reply.code(409).send({ error: "Your plan's server slot limit has been reached" });
       if (code === "SOFTWARE_RELEASE_UNAVAILABLE") return reply.code(409).send({ error: "This software and Minecraft version are not currently available" });
-      if (code === "NO_NODE_CAPACITY") return reply.code(409).send({ error: "No online node has enough available capacity" });
+      if (code === "NO_NODE_CAPACITY") return reply.code(409).send({ error: "No online node has enough RAM, disk, CPU or TCP port capacity" });
       if (typeof error === "object" && error !== null && "code" in error && error.code === "P2034") return reply.code(409).send({ error: "Capacity changed concurrently; please retry" });
       throw error;
     }
