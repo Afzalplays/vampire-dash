@@ -53,7 +53,7 @@ type metricsResponse struct {
  DataDirectory string `json:"dataDirectory"`
  SampledAt time.Time `json:"sampledAt"`
 }
-const version = "0.3.0"
+const version = "0.4.0"
 
 func loadConfig() (config, error) {
  c := config{
