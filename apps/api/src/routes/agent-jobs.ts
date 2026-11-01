@@ -225,7 +225,7 @@ export const agentJobRoutes: FastifyPluginAsync = async (app) => {
         select: {
           id: true, nodeId: true, nonce: true, status: true, leaseExpiresAt: true,
           lastErrorCode: true, operationId: true,
-          operation: { select: { type: true, payload: true, status: true, result: true, errorCode: true, errorMessage: true } },
+          operation: { select: { serverId: true, type: true, payload: true, status: true, result: true, errorCode: true, errorMessage: true } },
         },
       });
       if (!job) return "NOT_FOUND";
@@ -322,12 +322,13 @@ export const agentJobRoutes: FastifyPluginAsync = async (app) => {
         id: string;
         nonce: string;
         operationId: string;
+        serverId: string;
         operationType: string;
         payload: unknown;
         attempts: number;
         maxAttempts: number;
       }>>`
-        SELECT j."id", j."nonce", j."operationId", o."type" AS "operationType",
+        SELECT j."id", j."nonce", j."operationId", o."serverId", o."type" AS "operationType",
                o."payload", j."attempts", j."maxAttempts"
         FROM "NodeAgentJob" j
         INNER JOIN "MinecraftServerOperation" o ON o."id" = j."operationId"
@@ -377,6 +378,7 @@ export const agentJobRoutes: FastifyPluginAsync = async (app) => {
       id: claimed.id,
       nodeId: node.id,
       nonce: claimed.nonce,
+      serverId: claimed.serverId,
       issuedAt: issuedAt.toISOString(),
       expiresAt: expiresAt.toISOString(),
       action: claimed.operationType,
