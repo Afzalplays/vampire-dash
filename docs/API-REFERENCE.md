@@ -38,3 +38,9 @@ All admin endpoints require an authenticated ADMIN session. Capacity reservation
 - `POST /admin/artifacts/projects/:projectId/files` — admin-only version/file registration with provider CDN host validation and optional SHA-256/size metadata.\n- `GET /admin/artifacts/projects` — admin-only full catalogue review, including disabled projects and files.\n- `PATCH /admin/artifacts/projects/:projectId` — enable or disable a curated project.\n- `PATCH /admin/artifacts/files/:fileId` — enable or disable an individual pinned file.
 
 Catalogue records default to disabled. These endpoints store metadata only; they do not download or install artifacts.
+
+## Server operations (queue foundation)
+- `POST /servers/:serverId/operations` — owner-only, idempotent queue request for `START`, `STOP`, `RESTART`, or allowlisted `UPDATE_PROPERTIES`. Returns HTTP 202 with `execution: "NOT_DISPATCHED"`.
+- `GET /servers/:serverId/operations` — owner-only operation history (latest 50).
+
+Operation requests are persisted and audited, but are not executed yet. Only allowlisted server properties are accepted; arbitrary file paths, shell commands, URLs and container arguments are rejected. A node-agent dispatcher/worker must be deployed before these requests can change a running server.

@@ -17,6 +17,7 @@
 - [ ] Automated node enrollment/rotation
 - [ ] Connect reservations to customer server creation and server lifecycle transitions
 - [x] Durable idempotent server-operation queue schema for software and utility actions
+- [x] Owner-only idempotent operation request/history API for lifecycle and allowlisted properties (queue only; dispatch pending)
 - [ ] Customer server creation API with entitlement/quota enforcement and reservation consumption
 - [ ] Provisioning outbox dispatcher and secure node-agent job protocol
 - [ ] Operation worker, retries, cancellation and reconciliation

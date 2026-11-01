@@ -13,6 +13,7 @@ import { notificationRoutes } from "./routes/notifications.js";
 import { planRoutes } from "./routes/plans.js";
 import { softwareRoutes } from "./routes/software.js";
 import { artifactRoutes } from "./routes/artifacts.js";
+import { operationRoutes } from "./routes/operations.js";
 
 const app = Fastify({ logger: true, trustProxy: false, bodyLimit: 1024 * 1024 });
 await app.register(helmet);
@@ -28,6 +29,7 @@ await app.register(notificationRoutes, { prefix: "/api/notifications" });
 await app.register(planRoutes, { prefix: "/api/plans" });
 await app.register(softwareRoutes, { prefix: "/api/software" });
 await app.register(artifactRoutes, { prefix: "/api/artifacts" });
+await app.register(operationRoutes, { prefix: "/api/servers" });
 
 app.setErrorHandler((error, request, reply) => {
   request.log.error(error);
