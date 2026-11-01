@@ -2,8 +2,10 @@ package main
 
 import (
  "context"
+ "encoding/json"
  "errors"
  "path/filepath"
+ "strings"
  "testing"
  "time"
 )
@@ -95,5 +97,50 @@ func TestPollerReturnsErrorWhenResultSubmissionFails(t *testing.T) {
  if err := p.pollOnce(context.Background()); err == nil { t.Fatal("expected result submission failure") }
  if executor.calls != 1 || len(panel.results) != 1 {
   t.Fatalf("expected one execution and one attempted result: calls=%d results=%d", executor.calls, len(panel.results))
+ }
+}
+
+func readOperationJournalStages(t *testing.T, path string) []operationStage {
+ t.Helper()
+ data, err := os.ReadFile(path)
+ if err != nil { t.Fatal(err) }
+ lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+ stages := make([]operationStage, 0, len(lines))
+ for _, line := range lines {
+  var record operationJournalRecord
+  if err := json.Unmarshal([]byte(line), &record); err != nil { t.Fatal(err) }
+  stages = append(stages, record.Stage)
+ }
+ return stages
+}
+
+func TestPollerPersistsLifecycleBeforeAndAfterExecution(t *testing.T) {
+ response, body := testPollerJob(t, "START")
+ panel, executor := &fakeJobPanel{response: response, body: body}, &fakeJobExecutor{}
+ p := newTestPoller(panel, executor, t.TempDir())
+ if err := p.pollOnce(context.Background()); err != nil { t.Fatal(err) }
+ stages := readOperationJournalStages(t, p.journalPath+".operations.jsonl")
+ want := []operationStage{stageAccepted, stageAckConfirmed, stageExecutionStarted, stageResultPending, stageResultConfirmed}
+ if len(stages) != len(want) { t.Fatalf("stages=%v, want %v", stages, want) }
+ for i := range want { if stages[i] != want[i] { t.Fatalf("stages=%v, want %v", stages, want) } }
+}
+
+func TestPollerLeavesDurablePendingResultWhenSubmissionFails(t *testing.T) {
+ response, body := testPollerJob(t, "STOP")
+ panel, executor := &fakeJobPanel{response: response, body: body, resultErr: errors.New("panel unavailable")}, &fakeJobExecutor{}
+ p := newTestPoller(panel, executor, t.TempDir())
+ if err := p.pollOnce(context.Background()); err == nil { t.Fatal("expected result submission failure") }
+ stages := readOperationJournalStages(t, p.journalPath+".operations.jsonl")
+ if stages[len(stages)-1] != stageResultPending { t.Fatalf("last stage=%s, want RESULT_PENDING", stages[len(stages)-1]) }
+}
+
+func TestPollerPersistsAcceptanceButNotExecutionWhenAckFails(t *testing.T) {
+ response, body := testPollerJob(t, "START")
+ panel, executor := &fakeJobPanel{response: response, body: body, ackErr: errors.New("ack timeout")}, &fakeJobExecutor{}
+ p := newTestPoller(panel, executor, t.TempDir())
+ if err := p.pollOnce(context.Background()); err == nil { t.Fatal("expected ACK failure") }
+ stages := readOperationJournalStages(t, p.journalPath+".operations.jsonl")
+ if len(stages) != 1 || stages[0] != stageAccepted || executor.calls != 0 {
+  t.Fatalf("stages=%v executor calls=%d", stages, executor.calls)
  }
 }
