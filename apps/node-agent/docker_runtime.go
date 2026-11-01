@@ -242,7 +242,7 @@ func (d *dockerRuntime) provisionServer(ctx context.Context, job signedNodeJob) 
  if err := decodeStrictPayload(job.Payload, &payload); err != nil { return nil, errors.New("invalid provisioning payload") }
  if !dockerImagePattern.MatchString(payload.DockerImage) || !strings.Contains(payload.DockerImage, "@sha256:") { return nil, errors.New("container image must be pinned by SHA-256 digest") }
  if strings.TrimSpace(job.ServerID) == "" || strings.TrimSpace(job.NodeID) == "" { return nil, errors.New("server and node identity are required") }
- if payload.MemoryMB < 256 || payload.DiskMB < 512 || payload.CPUPercent < 10 || payload.CPUPercent > 6400 || payload.Port < 1024 || payload.Port > 65535 { return nil, errors.New("provisioning resources are outside supported bounds") }
+ if strings.TrimSpace(payload.Name) == "" || len(payload.Name) > 32 || strings.TrimSpace(payload.MinecraftVersion) == "" || len(payload.MinecraftVersion) > 32 || payload.JavaMajor < 8 || payload.JavaMajor > 30 || payload.MemoryMB < 256 || payload.MemoryMB > 4_194_304 || payload.DiskMB < 512 || payload.DiskMB > 16_777_216 || payload.CPUPercent < 10 || payload.CPUPercent > 6400 || payload.Port < 1024 || payload.Port > 65535 { return nil, errors.New("provisioning parameters are outside supported bounds") }
  if !oneOf(payload.Software, "VANILLA", "PAPER", "PURPUR", "FABRIC", "FORGE", "NEOFORGE", "VELOCITY", "BUNGEECORD") { return nil, errors.New("unsupported Java server software") }
  if !regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}package main
 
@@ -470,7 +470,7 @@ func (d *dockerRuntime) inspectServerContainer(ctx context.Context, containerID,
  var created struct { ID string `json:"Id"` }
  if err := readDockerJSON(response,&created); err != nil { return nil,err }
  if !dockerContainerIDPattern.MatchString(created.ID) { return nil,errors.New("Docker returned an invalid container ID") }
- inspected, err := d.inspectProvisionedContainer(ctx,created.ID,job.ServerID,payload)
+ inspected, err := d.inspectProvisionedContainer(ctx,created.ID,job.ServerID,job.NodeID,payload)
  if err != nil { return nil,err }
  if inspected.State.Running { return nil,errors.New("new server container unexpectedly started before provisioning completed") }
  response, err = d.request(ctx,http.MethodPost,"/containers/"+created.ID+"/start")
@@ -481,12 +481,12 @@ func (d *dockerRuntime) inspectServerContainer(ctx context.Context, containerID,
  return map[string]any{"state":"RUNNING","port":payload.Port,"containerId":created.ID,"diskLimitMb":payload.DiskMB,"memoryLimitMb":payload.MemoryMB,"cpuPercent":payload.CPUPercent},nil
 }
 
-func (d *dockerRuntime) inspectProvisionedContainer(ctx context.Context, containerID, serverID string, payload dockerProvisionPayload) (dockerContainerInspect,error) {
+func (d *dockerRuntime) inspectProvisionedContainer(ctx context.Context, containerID, serverID, nodeID string, payload dockerProvisionPayload) (dockerContainerInspect,error) {
  var inspected dockerContainerInspect
  if !dockerContainerIDPattern.MatchString(containerID) { return inspected,errors.New("container identity is invalid") }
  response,err:=d.request(ctx,http.MethodGet,"/containers/"+url.PathEscape(containerID)+"/json"); if err!=nil{return inspected,err}
  if err:=readDockerJSON(response,&inspected);err!=nil{return inspected,err}
- if inspected.Config.Labels[dockerServerLabel]!=serverID || inspected.Config.Labels["com.vampirenodes.managed"]!="true" { return inspected,errors.New("provisioned container ownership labels do not match") }
+ if inspected.Config.Labels[dockerServerLabel]!=serverID || inspected.Config.Labels[dockerNodeLabel]!=nodeID || inspected.Config.Labels["com.vampirenodes.managed"]!="true" { return inspected,errors.New("provisioned container ownership labels do not match") }
  if inspected.HostConfig.Memory!=payload.MemoryMB*1024*1024 || inspected.HostConfig.NanoCpus!=payload.CPUPercent*10_000_000 || inspected.HostConfig.StorageOpt["size"]!=strconv.FormatInt(payload.DiskMB,10)+"m" { return inspected,errors.New("Docker did not apply requested memory, CPU and disk limits") }
  binding:=inspected.HostConfig.PortBindings["25565/tcp"]; if len(binding)!=1 || binding[0].HostPort!=strconv.Itoa(payload.Port) { return inspected,errors.New("Docker did not apply reserved TCP port") }
  return inspected,nil
