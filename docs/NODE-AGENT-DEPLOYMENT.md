@@ -45,7 +45,7 @@ The service runs as root because access to the Docker socket is effectively root
 
 ## Verify and activate the node
 
-1. In the admin UI, open Admin / Nodes and register the node with its HTTPS endpoint, physical RAM/disk capacity and allocation port range.
+1. In the admin UI, open Admin / Nodes and register the node with its HTTPS endpoint, physical RAM/disk capacity, public Minecraft DNS/IP address and allocation port range.
 2. Copy the returned node ID and one-time agent token into the node environment file.
 3. Install the node TLS certificate, private key and panel-client CA at the configured paths.
 4. Restart the agent and run Check mTLS in Admin / Nodes.
