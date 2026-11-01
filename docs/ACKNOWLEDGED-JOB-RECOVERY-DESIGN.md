@@ -41,3 +41,12 @@ The executor persists EXECUTION_STARTED before the runtime call and RESULT_PENDI
 5. Implement desired-state runtime operations for START, STOP, and properties; keep RESTART fail-closed until it has a true idempotency mechanism.
 6. Run Go, TypeScript, Prisma migration, and integration suites in CI; review logs for credential and payload leakage.
 7. Consider a limited canary only after every gate passes. Production dispatch remains disabled until then.
+
+
+## Implementation status
+
+The local Go agent now has an append-only, fsync-backed operation journal with ACCEPTED, ACK_CONFIRMED, EXECUTION_STARTED, RESULT_PENDING, and RESULT_CONFIRMED checkpoints. The worker persists each checkpoint around ACK, execution, and result submission. Pending terminal results are stored without the ephemeral lease token. A recovery reader validates the complete monotonic history and returns each job's latest state.
+
+The poller fails closed and refuses to claim additional work while any journaled operation is not RESULT_CONFIRMED. This prevents new dispatch from hiding an unresolved operation, but it does not itself reconcile or resume that operation. A process restart with an unresolved record therefore requires the server-side reconciliation path below before polling can safely continue.
+
+Still not implemented: server-side reconciliation endpoint, server-derived immutable operation digest, safe backfill/migration, recovery of a pending result after restart, or a production runtime adapter. The agent remains undispatched in production.
