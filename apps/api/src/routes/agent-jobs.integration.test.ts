@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createHmac, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes } from "node:crypto";
 import { after, before, describe, it } from "node:test";
 import Fastify from "fastify";
 import rateLimit from "@fastify/rate-limit";
@@ -132,7 +132,6 @@ describe("agent reconciliation route database integration", () => {
     const server = await prisma.minecraftServer.create({ data: { ownerId: user.id, nodeId: node.id, name: "provision-result-server", software: "PAPER", version: "1.21.1", memoryMb: 2048, diskMb: 10240, cpuPercent: 100 } });
     const operation = await prisma.minecraftServerOperation.create({ data: { serverId: server.id, actorUserId: user.id, type: "PROVISION_SERVER", status: "RUNNING", idempotencyKey: `provision-result-${randomBytes(12).toString("hex")}`, payload: {}, startedAt: new Date() } });
     const leaseToken = Buffer.from(randomBytes(32)).toString("base64url");
-    const { createHash } = await import("node:crypto");
     const job = await prisma.nodeAgentJob.create({ data: { operationId: operation.id, nodeId: node.id, nonce: randomBytes(32).toString("hex"), status: "ACKNOWLEDGED", attempts: 1, leaseTokenHash: createHash("sha256").update(leaseToken).digest("hex"), leaseExpiresAt: new Date(Date.now() + 60_000) } });
     try {
       const response = await app.inject({ method: "POST", url: `/api/agent/jobs/${job.id}/result`, headers: { authorization: `Bearer ${agentToken}`, "content-type": "application/json" }, payload: { leaseToken, status: "SUCCEEDED", result: { state: "RUNNING", port: 25565 } } });
