@@ -147,4 +147,26 @@ describe("admin node recovery and credential routes", () => {
       await prisma.user.delete({ where: { id: admin.id } });
     }
   });
+
+  it("only enables a node after a recent successful health check", async () => {
+    const admin = await prisma.user.create({ data: { email: `enable-admin-${randomBytes(8).toString("hex")}@example.test`, username: `enable_admin_${randomBytes(8).toString("hex")}`, passwordHash: "test-only-password-hash", role: "ADMIN", emailVerifiedAt: new Date() } });
+    const sessionToken = secretToken();
+    const session = await prisma.session.create({ data: { userId: admin.id, tokenHash: digest(sessionToken), expiresAt: new Date(Date.now() + 60 * 60 * 1000) } });
+    const node = await prisma.minecraftNode.create({ data: { name: "enable-integration-node", location: "ci", endpoint: `https://enable-node-${randomBytes(6).toString("hex")}.example.test`, tokenHash: digest(secretToken()), tokenCiphertext: "ciphertext", tokenNonce: "nonce", tokenAuthTag: "auth-tag", enabled: false, healthStatus: "ONLINE", lastSeenAt: new Date(Date.now() - 10 * 60 * 1000), memoryMb: 8192, diskMb: 81920 } });
+    const headers = { cookie: `vd_session=${sessionToken}`, "content-type": "application/json" };
+    try {
+      const stale = await app.inject({ method: "POST", url: `/api/admin/nodes/${node.id}/enable`, headers, payload: {} });
+      assert.equal(stale.statusCode, 409, stale.body);
+      assert.equal((await prisma.minecraftNode.findUniqueOrThrow({ where: { id: node.id } })).enabled, false);
+      await prisma.minecraftNode.update({ where: { id: node.id }, data: { lastSeenAt: new Date() } });
+      const enabled = await app.inject({ method: "POST", url: `/api/admin/nodes/${node.id}/enable`, headers, payload: {} });
+      assert.equal(enabled.statusCode, 200, enabled.body);
+      assert.equal(enabled.json().enabled, true);
+      assert.ok(await prisma.auditLog.findFirst({ where: { action: "NODE_ENABLED", targetId: node.id } }));
+    } finally {
+      await prisma.minecraftNode.delete({ where: { id: node.id } });
+      await prisma.session.delete({ where: { id: session.id } });
+      await prisma.user.delete({ where: { id: admin.id } });
+    }
+  });
 });
