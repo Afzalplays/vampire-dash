@@ -74,10 +74,6 @@ func validateOperationJournalRecord(record operationJournalRecord) error {
 		if err := json.Unmarshal(record.Result, &value); err != nil {
 			return errors.New("invalid result JSON in operation journal")
 		}
-		canonical, err := json.Marshal(value)
-		if err != nil || string(canonical) != string(record.Result) {
-			return errors.New("operation journal result must be canonical JSON")
-		}
 		sum := sha256.Sum256(record.Result)
 		if hex.EncodeToString(sum[:]) != record.ResultHash {
 			return errors.New("operation journal result hash mismatch")
