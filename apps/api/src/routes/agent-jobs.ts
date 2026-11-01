@@ -9,6 +9,17 @@ import { nodeAgentTerminalResultHash, nodeOperationIdentityHash } from "../lib/a
 
 
 const powerPayloadSchema = z.object({}).strict();
+const provisionPayloadSchema = z.object({
+  name: z.string().trim().min(3).max(32),
+  software: z.enum(["VANILLA", "PAPER", "PURPUR", "FABRIC", "FORGE", "NEOFORGE", "VELOCITY", "BUNGEECORD"]),
+  minecraftVersion: z.string().trim().min(1).max(32),
+  dockerImage: z.string().trim().min(3).max(255).regex(/^[A-Za-z0-9._/:@-]+$/),
+  javaMajor: z.number().int().min(8).max(30),
+  memoryMb: z.number().int().min(256).max(4_194_304),
+  diskMb: z.number().int().min(512).max(16_777_216),
+  cpuPercent: z.number().int().min(10).max(6400),
+  port: z.number().int().min(1024).max(65535),
+}).strict();
 const propertiesPayloadSchema = z.object({
   motd: z.string().max(128).optional(),
   difficulty: z.enum(["peaceful", "easy", "normal", "hard"]).optional(),
@@ -20,6 +31,7 @@ const propertiesPayloadSchema = z.object({
   spawnProtection: z.number().int().min(0).max(128).optional(),
 }).strict().refine((value) => Object.keys(value).length > 0, "At least one property is required");
 function validateClaimedPayload(action: string, payload: unknown): boolean {
+  if (action === "PROVISION_SERVER") return provisionPayloadSchema.safeParse(payload).success;
   if (["START", "STOP", "RESTART"].includes(action)) return powerPayloadSchema.safeParse(payload).success;
   if (action === "UPDATE_PROPERTIES") return propertiesPayloadSchema.safeParse(payload).success;
   return false;
@@ -337,7 +349,7 @@ export const agentJobRoutes: FastifyPluginAsync = async (app) => {
           AND j."availableAt" <= ${now}
           AND j."attempts" < j."maxAttempts"
           AND o."status" = 'QUEUED'
-          AND o."type" IN ('START', 'STOP', 'RESTART', 'UPDATE_PROPERTIES')
+          AND o."type" IN ('PROVISION_SERVER', 'START', 'STOP', 'RESTART')
         ORDER BY j."availableAt" ASC, j."createdAt" ASC
         LIMIT 1
         FOR UPDATE OF j SKIP LOCKED
