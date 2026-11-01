@@ -7,11 +7,19 @@ import (
  "testing"
  "time"
 )
-func jsonString(v string) string { b,_:=json.Marshal(v);return string(b) }
+
 func claimFixture(now time.Time) []byte {
  job:=signedJobBody(now,"RESTART",`{}`)
  lease:=base64.RawURLEncoding.EncodeToString(make([]byte,32))
- return []byte(`{"job":`+string(job)+`,"signedBody":`+jsonString(string(job))+`,"signature":"sha256="+strings.Repeat("a",64)+`,"leaseToken":`+jsonString(lease)+`,"leaseExpiresAt":`+jsonString(now.Add(time.Minute).Format(time.RFC3339Nano))+`}`)
+ response:=map[string]any{
+  "job":json.RawMessage(job),
+  "signedBody":string(job),
+  "signature":"sha256="+strings.Repeat("a",64),
+  "leaseToken":lease,
+  "leaseExpiresAt":now.Add(time.Minute).Format(time.RFC3339Nano),
+ }
+ raw,err:=json.Marshal(response);if err!=nil{panic(err)}
+ return raw
 }
 func TestDecodeClaimResponsePreservesExactSignedBytes(t *testing.T) {
  now:=time.Now().UTC();raw:=claimFixture(now)
