@@ -74,6 +74,70 @@ func TestDockerRuntimeStartsOnlyContainerBoundToServerLabel(t *testing.T) {
 	if len(calls) != 4 { t.Fatalf("expected list, inspect, start, inspect; got %v", calls) }
 }
 
+func TestDockerRuntimeStopsMappedContainerAndVerifiesState(t *testing.T) {
+	running := true
+	stopCalled := false
+	runtime := dockerTestRuntime(func(request *http.Request) (*http.Response, error) {
+		switch {
+		case request.Method == http.MethodGet && request.URL.Path == "/"+dockerAPIVersion+"/containers/json":
+			return dockerTestResponse(http.StatusOK, fmt.Sprintf(
+				`[{"Id":%q,"Labels":{"%s":"server-stop"}}]`,
+				dockerTestContainerID, dockerServerLabel,
+			)), nil
+		case request.Method == http.MethodGet && request.URL.Path == "/"+dockerAPIVersion+"/containers/"+dockerTestContainerID+"/json":
+			state := "false"
+			if running { state = "true" }
+			return dockerTestResponse(http.StatusOK, fmt.Sprintf(
+				`{"Config":{"Labels":{"%s":"server-stop"}},"State":{"Running":%s}}`,
+				dockerServerLabel, state,
+			)), nil
+		case request.Method == http.MethodPost && request.URL.Path == "/"+dockerAPIVersion+"/containers/"+dockerTestContainerID+"/stop" && request.URL.Query().Get("t") == "30":
+			stopCalled = true
+			running = false
+			return dockerTestResponse(http.StatusNoContent, ""), nil
+		default:
+			t.Fatalf("unexpected Docker request: %s %s", request.Method, request.URL.RequestURI())
+			return nil, fmt.Errorf("unexpected request")
+		}
+	})
+	result, err := runtime.Execute(context.Background(), signedNodeJob{
+		ServerID: "server-stop", Action: "STOP", Payload: []byte("{}"),
+	})
+	if err != nil { t.Fatal(err) }
+	if result["state"] != "STOPPED" || running || !stopCalled {
+		t.Fatalf("stop was not verified: result=%#v running=%v stopCalled=%v", result, running, stopCalled)
+	}
+}
+
+func TestDockerRuntimeStartIsIdempotentWhenAlreadyRunning(t *testing.T) {
+	calls := 0
+	runtime := dockerTestRuntime(func(request *http.Request) (*http.Response, error) {
+		calls++
+		switch request.URL.Path {
+		case "/"+dockerAPIVersion+"/containers/json":
+			return dockerTestResponse(http.StatusOK, fmt.Sprintf(
+				`[{"Id":%q,"Labels":{"%s":"server-running"}}]`,
+				dockerTestContainerID, dockerServerLabel,
+			)), nil
+		case "/"+dockerAPIVersion+"/containers/"+dockerTestContainerID+"/json":
+			return dockerTestResponse(http.StatusOK, fmt.Sprintf(
+				`{"Config":{"Labels":{"%s":"server-running"}},"State":{"Running":true}}`,
+				dockerServerLabel,
+			)), nil
+		default:
+			t.Fatalf("already-running container must not receive a mutation: %s %s", request.Method, request.URL.RequestURI())
+			return nil, fmt.Errorf("unexpected request")
+		}
+	})
+	result, err := runtime.Execute(context.Background(), signedNodeJob{
+		ServerID: "server-running", Action: "START", Payload: []byte("{}"),
+	})
+	if err != nil { t.Fatal(err) }
+	if result["state"] != "RUNNING" || calls != 3 {
+		t.Fatalf("start was not idempotent: result=%#v calls=%d", result, calls)
+	}
+}
+
 func TestDockerRuntimeDoesNotStartAmbiguousServerIdentity(t *testing.T) {
 	runtime := dockerTestRuntime(func(request *http.Request) (*http.Response, error) {
 		return dockerTestResponse(http.StatusOK, fmt.Sprintf(
