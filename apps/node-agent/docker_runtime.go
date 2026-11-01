@@ -167,11 +167,20 @@ func (d *dockerRuntime) inspectServerContainer(ctx context.Context, containerID,
 // panel-owned immutable label. It never accepts container IDs or commands
 // from the signed job payload and never invokes a shell.
 func (d *dockerRuntime) Execute(ctx context.Context, job signedNodeJob) (map[string]any, error) {
-	if len(job.Payload) == 0 || string(job.Payload) != "{}" {
-		if job.Action != "UPDATE_PROPERTIES" {
-			return nil, errors.New("runtime action payload is invalid")
+	switch job.Action {
+	case "START", "STOP":
+		var payload powerJobPayload
+		if err := decodeStrictPayload(job.Payload, &payload); err != nil {
+			return nil, errors.New("power operation payload must be an empty object")
 		}
+	case "RESTART":
+		return nil, errors.New("RESTART is disabled until durable restart idempotency is implemented")
+	case "UPDATE_PROPERTIES":
+		return nil, errors.New("UPDATE_PROPERTIES is disabled until a verified server-file adapter is implemented")
+	default:
+		return nil, errors.New("runtime action is not allowlisted")
 	}
+
 	containerID, err := d.resolveServerContainer(ctx, job.ServerID)
 	if err != nil {
 		return nil, err
@@ -200,12 +209,6 @@ func (d *dockerRuntime) Execute(ctx context.Context, job signedNodeJob) (map[str
 			}
 			response.Body.Close()
 		}
-	case "RESTART":
-		return nil, errors.New("RESTART is disabled until durable restart idempotency is implemented")
-	case "UPDATE_PROPERTIES":
-		return nil, errors.New("UPDATE_PROPERTIES is disabled until a verified server-file adapter is implemented")
-	default:
-		return nil, errors.New("runtime action is not allowlisted")
 	}
 	afterRunning, err := d.inspectServerContainer(ctx, containerID, job.ServerID)
 	if err != nil {
