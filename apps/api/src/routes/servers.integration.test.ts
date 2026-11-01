@@ -57,6 +57,10 @@ describe("server creation resource and port allocation", () => {
       const first = await app.inject({ method: "POST", url: "/api/servers", headers, payload: { entitlementId: entitlement.id, name: "CI Server One", software: "PAPER", version: "1.21.1" } });
       assert.equal(first.statusCode, 202, first.body);
       assert.equal(first.json().server.allocation.port, 25565);
+      const firstOperation = await prisma.minecraftServerOperation.findFirstOrThrow({ where: { serverId: first.json().server.id, type: "PROVISION_SERVER" }, include: { agentJob: true } });
+      assert.equal(firstOperation.status, "QUEUED");
+      assert.equal(firstOperation.agentJob?.nodeId, node.id);
+      assert.equal((firstOperation.payload as { port: number }).port, 25565);
       const second = await app.inject({ method: "POST", url: "/api/servers", headers, payload: { entitlementId: entitlement.id, name: "CI Server Two", software: "PAPER", version: "1.21.1" } });
       assert.equal(second.statusCode, 202, second.body);
       assert.equal(second.json().server.allocation.port, 25566);
