@@ -31,6 +31,43 @@ const stableJson = (value: unknown): string => {
   return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableJson(record[key])}`).join(",")}}`;
 };
 
+
+const goCompatibleJson = (value: unknown): string =>
+  stableJson(value)
+    .replace(/&/g, "\\u0026")
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/\\u2028/g, "\\u2028")
+    .replace(/\\u2029/g, "\\u2029");
+
+const goJSONString = (value: string): string =>
+  JSON.stringify(value)
+    .replace(/&/g, "\\u0026")
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/\\u2028/g, "\\u2028")
+    .replace(/\\u2029/g, "\\u2029");
+
+function nodeOperationIdentityHash(job: {
+  id: string; nodeId: string; nonce: string;
+  operation: { type: string; payload: unknown };
+}): string {
+  const payload = goCompatibleJson(job.operation.payload);
+  const identity = `{"id":${goJSONString(job.id)},"nodeId":${goJSONString(job.nodeId)},"nonce":${goJSONString(job.nonce)},"action":${goJSONString(job.operation.type)},"payload":${payload}}`;
+  return createHash("sha256").update(identity, "utf8").digest("hex");
+}
+
+const terminalResultSchema = z.object({
+  status: z.enum(["SUCCEEDED", "FAILED"]),
+  result: z.record(z.string(), z.unknown()).optional(),
+  errorCode: z.string().regex(/^[A-Z0-9_]{1,64}$/).optional(),
+  errorMessage: z.string().max(500).optional(),
+}).strict().superRefine((value, context) => {
+  if (value.status === "FAILED" && !value.errorCode) {
+    context.addIssue({ code: "custom", message: "Failed results require an error code" });
+  }
+});
+
 const tokenDigest = (token: string) =>
   createHmac("sha256", env.SESSION_SECRET).update(token, "utf8").digest("hex");
 
@@ -162,6 +199,113 @@ export const agentJobRoutes: FastifyPluginAsync = async (app) => {
     if (outcome === "INVALID_LEASE") return reply.code(401).send({ error: "Lease token is invalid" });
     if (outcome === "EXPIRED") return reply.code(409).send({ error: "Lease has expired" });
     if (outcome === "CONFLICT" || outcome === "RESULT_CONFLICT") return reply.code(409).send({ error: "Job state changed or result does not match the original submission" });
+    return { ok: true, status: outcome };
+  });
+
+
+  app.post("/jobs/:jobId/reconcile", { config: { rateLimit: { max: 60, timeWindow: "1 minute" } } }, async (request, reply) => {
+    const authorization = request.headers.authorization ?? "";
+    const match = /^Bearer ([A-Za-z0-9_-]{40,64})$/.exec(authorization);
+    if (!match) return reply.code(401).send({ error: "Node bearer authentication required" });
+    const node = await prisma.minecraftNode.findUnique({
+      where: { tokenHash: tokenDigest(match[1]) },
+      select: { id: true, enabled: true, healthStatus: true },
+    });
+    if (!node) return reply.code(401).send({ error: "Invalid node credentials" });
+    if (!node.enabled || node.healthStatus !== "ONLINE") return reply.code(403).send({ error: "Node is not enabled and online" });
+
+    const params = z.object({ jobId: z.string().min(16).max(128).regex(/^[A-Za-z0-9_-]+$/) }).safeParse(request.params);
+    const body = z.object({
+      identityHash: z.string().regex(/^[a-f0-9]{64}$/),
+      state: z.enum(["EXECUTION_STARTED", "RESULT_PENDING"]),
+      resultHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+      terminalResult: terminalResultSchema.optional(),
+    }).strict().superRefine((value, context) => {
+      if (value.state === "RESULT_PENDING" && (!value.resultHash || !value.terminalResult)) {
+        context.addIssue({ code: "custom", message: "Pending results require a result hash and terminal result" });
+      }
+      if (value.state === "EXECUTION_STARTED" && (value.resultHash || value.terminalResult)) {
+        context.addIssue({ code: "custom", message: "Execution-started reports cannot contain a result" });
+      }
+    }).safeParse(request.body);
+    if (!params.success || !body.success) return reply.code(400).send({ error: "Invalid operation reconciliation request" });
+    if (body.data.terminalResult && Buffer.byteLength(stableJson(body.data.terminalResult), "utf8") > 8192) {
+      return reply.code(400).send({ error: "Terminal result is too large" });
+    }
+    if (body.data.terminalResult) {
+      const computed = createHash("sha256").update(goCompatibleJson(body.data.terminalResult), "utf8").digest("hex");
+      if (computed !== body.data.resultHash) return reply.code(400).send({ error: "Terminal result hash does not match its content" });
+    }
+
+    const outcome = await prisma.$transaction(async (tx) => {
+      const job = await tx.nodeAgentJob.findFirst({
+        where: { id: params.data.jobId, nodeId: node.id },
+        select: {
+          id: true, nodeId: true, nonce: true, status: true, leaseExpiresAt: true,
+          lastErrorCode: true, operationId: true,
+          operation: { select: { type: true, payload: true, status: true, result: true, errorCode: true, errorMessage: true } },
+        },
+      });
+      if (!job) return "NOT_FOUND";
+      const expectedIdentity = nodeOperationIdentityHash(job);
+      if (expectedIdentity !== body.data.identityHash) return "IDENTITY_CONFLICT";
+
+      const now = new Date();
+      if (body.data.state === "EXECUTION_STARTED") {
+        if (job.status === "ACKNOWLEDGED" && job.leaseExpiresAt && job.leaseExpiresAt > now) return "IN_PROGRESS";
+        if (job.status === "DEAD" && job.lastErrorCode === "ACKNOWLEDGED_LEASE_EXPIRED") return "UNCERTAIN";
+        if (job.status === "SUCCEEDED" || job.status === "FAILED") return "UNCERTAIN";
+        return "CONFLICT";
+      }
+
+      const terminal = body.data.terminalResult!;
+      const expectedJobStatus = terminal.status;
+      if (job.status === "SUCCEEDED" || job.status === "FAILED") {
+        const sameResult =
+          job.status === expectedJobStatus &&
+          job.operation.status === expectedJobStatus &&
+          stableJson(job.operation.result ?? {}) === stableJson(terminal.result ?? {}) &&
+          (job.operation.errorCode ?? undefined) === (terminal.errorCode ?? undefined) &&
+          (job.operation.errorMessage ?? undefined) === (terminal.errorMessage ?? (terminal.status === "FAILED" ? "Node agent reported operation failure" : undefined));
+        return sameResult ? "RESULT_COMMITTED" : "CONFLICT";
+      }
+
+      if (job.status === "ACKNOWLEDGED" && job.leaseExpiresAt && job.leaseExpiresAt > now) return "IN_PROGRESS";
+      if (job.status !== "DEAD" || job.lastErrorCode !== "ACKNOWLEDGED_LEASE_EXPIRED" ||
+          job.operation.status !== "FAILED" || job.operation.errorCode !== "AGENT_JOB_LEASE_LOST") {
+        return "UNCERTAIN";
+      }
+
+      const errorMessage = terminal.status === "FAILED"
+        ? terminal.errorMessage ?? "Node agent reported operation failure"
+        : null;
+      const updatedJob = await tx.nodeAgentJob.updateMany({
+        where: { id: job.id, nodeId: node.id, status: "DEAD", lastErrorCode: "ACKNOWLEDGED_LEASE_EXPIRED" },
+        data: {
+          status: expectedJobStatus,
+          resultRequestHash: body.data.resultHash!,
+          lastErrorCode: terminal.status === "FAILED" ? terminal.errorCode : null,
+          lastError: errorMessage,
+        },
+      });
+      if (updatedJob.count !== 1) return "CONFLICT";
+      const updatedOperation = await tx.minecraftServerOperation.updateMany({
+        where: { id: job.operationId, status: "FAILED", errorCode: "AGENT_JOB_LEASE_LOST" },
+        data: {
+          status: expectedJobStatus,
+          result: (terminal.result ?? {}) as Prisma.InputJsonValue,
+          errorCode: terminal.status === "FAILED" ? terminal.errorCode : null,
+          errorMessage,
+          finishedAt: now,
+        },
+      });
+      if (updatedOperation.count !== 1) throw new Error("Operation changed during reconciliation");
+      return "RESULT_ACCEPTED";
+    }, { maxWait: 10000, timeout: 15000 });
+
+    if (outcome === "NOT_FOUND") return reply.code(404).send({ error: "Job not found for this node" });
+    if (outcome === "IDENTITY_CONFLICT") return reply.code(409).send({ error: "Operation identity does not match the original job" });
+    if (outcome === "CONFLICT") return reply.code(409).send({ error: "Operation state or terminal result conflicts with the server record" });
     return { ok: true, status: outcome };
   });
 
