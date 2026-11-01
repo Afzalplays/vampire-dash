@@ -59,11 +59,11 @@ func TestOperationJournalRejectsSkippedOrBackwardTransitions(t *testing.T) {
 	if err := advanceOperationJournal(path, operationTestRecord(stageExecutionStarted)); err == nil {
 		t.Fatal("expected skipped transition rejection")
 	}
-	if err := advanceOperationJournal(path, operationTestRecord(stageAccepted)); err == nil {
-		t.Fatal("expected backward transition rejection")
-	}
 	if err := advanceOperationJournal(path, operationTestRecord(stageAckConfirmed)); err != nil {
 		t.Fatal(err)
+	}
+	if err := advanceOperationJournal(path, operationTestRecord(stageAccepted)); err == nil {
+		t.Fatal("expected backward transition rejection")
 	}
 }
 
