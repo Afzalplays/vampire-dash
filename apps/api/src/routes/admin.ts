@@ -382,6 +382,44 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     });
   });
 
+  app.get("/nodes/:nodeId/uncertain-jobs", async (request, reply) => {
+    const admin = await requireAdmin(request, reply); if (!admin) return;
+    const params = z.object({ nodeId: z.string().min(1).max(128) }).safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ error: "Invalid node ID" });
+    const node = await prisma.minecraftNode.findUnique({
+      where: { id: params.data.nodeId },
+      select: { id: true, name: true },
+    });
+    if (!node) return reply.code(404).send({ error: "Node not found" });
+
+    const jobs = await prisma.nodeAgentJob.findMany({
+      where: {
+        nodeId: node.id,
+        status: "DEAD",
+        lastErrorCode: "ACKNOWLEDGED_LEASE_EXPIRED",
+        operation: { status: "FAILED", errorCode: "AGENT_JOB_LEASE_LOST" },
+      },
+      select: {
+        id: true, status: true, attempts: true, maxAttempts: true,
+        lastErrorCode: true, lastError: true, createdAt: true, updatedAt: true,
+        operation: {
+          select: {
+            id: true, serverId: true, type: true, status: true,
+            errorCode: true, errorMessage: true, createdAt: true, finishedAt: true,
+          },
+        },
+      },
+      orderBy: { updatedAt: "asc" },
+      take: 100,
+    });
+    return {
+      node,
+      jobs,
+      limit: 100,
+      warning: "These operations may have produced side effects. Do not retry or re-dispatch them automatically; inspect the server before taking manual action.",
+    };
+  });
+
   app.post("/nodes/:nodeId/disable", async (request, reply) => {
     const admin = await requireAdmin(request, reply); if (!admin) return;
     const params = z.object({ nodeId: z.string().min(1).max(128) }).safeParse(request.params);
