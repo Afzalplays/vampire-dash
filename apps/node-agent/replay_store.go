@@ -30,7 +30,7 @@ func consumeJobReplayKey(journalPath, jobID, nonce, bodyHash string) (bool, erro
  }
  if journalPath == "" || !filepath.IsAbs(journalPath) { return false, errors.New("replay journal path must be absolute") }
  if err := os.MkdirAll(filepath.Dir(journalPath), 0700); err != nil { return false, fmt.Errorf("create replay journal directory: %w", err) }
- file, err := os.OpenFile(journalPath, os.O_CREATE|os.O_RDWR, 0600)
+ file, err := os.OpenFile(journalPath, os.O_CREATE|os.O_RDWR|syscall.O_NOFOLLOW, 0600)
  if err != nil { return false, fmt.Errorf("open replay journal: %w", err) }
  defer file.Close()
  if err := syscall.Flock(int(file.Fd()), syscall.LOCK_EX); err != nil { return false, fmt.Errorf("lock replay journal: %w", err) }

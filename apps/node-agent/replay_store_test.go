@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+ "os"
 	"sync"
 	"testing"
 )
@@ -40,4 +41,19 @@ func TestReplayJournalConcurrentDuplicateIsIdempotent(t *testing.T) {
 	wg.Wait();close(results);fresh,duplicates:=0,0
 	for r:=range results { if r.err!=nil { t.Fatal(r.err) };if r.duplicate {duplicates++}else{fresh++} }
 	if fresh!=1||duplicates!=11 { t.Fatalf("fresh=%d duplicates=%d",fresh,duplicates) }
+}
+
+func TestReplayJournalRejectsSymlink(t *testing.T) {
+ dir:=t.TempDir(); target:=filepath.Join(dir,"target")
+ if err:=os.WriteFile(target,[]byte(""),0600);err!=nil {t.Fatal(err)}
+ link:=filepath.Join(dir,"replay.jsonl")
+ if err:=os.Symlink(target,link);err!=nil {t.Fatal(err)}
+ if _,err:=consumeJobReplayKey(link,replayTestJob,replayTestNonce,replayHash("body"));err==nil {t.Fatal("expected symlink rejection")}
+}
+func TestReplayJournalHardensExistingFilePermissions(t *testing.T) {
+ path:=filepath.Join(t.TempDir(),"replay.jsonl")
+ if err:=os.WriteFile(path,[]byte(""),0644);err!=nil {t.Fatal(err)}
+ if _,err:=consumeJobReplayKey(path,replayTestJob,replayTestNonce,replayHash("body"));err!=nil {t.Fatal(err)}
+ info,err:=os.Stat(path);if err!=nil {t.Fatal(err)}
+ if info.Mode().Perm()!=0600 {t.Fatalf("permissions=%o, want 600",info.Mode().Perm())}
 }
