@@ -16,8 +16,8 @@ export async function recoverExpiredAgentJobs(now = new Date()): Promise<{ retri
     if (!lock[0]?.locked) return { retried: 0, dead: 0 };
 
     const expired = await tx.nodeAgentJob.findMany({
-      where: { status: "LEASED", leaseExpiresAt: { lte: now } },
-      select: { id: true, operationId: true, attempts: true, maxAttempts: true },
+      where: { status: { in: ["LEASED", "ACKNOWLEDGED"] }, leaseExpiresAt: { lte: now } },
+      select: { id: true, operationId: true, attempts: true, maxAttempts: true, status: true },
       orderBy: { leaseExpiresAt: "asc" },
       take: 250,
     });
@@ -25,22 +25,24 @@ export async function recoverExpiredAgentJobs(now = new Date()): Promise<{ retri
     let retried = 0;
     let dead = 0;
     for (const job of expired) {
-      if (job.attempts >= job.maxAttempts) {
+      // Once acknowledged, the agent may already have started side effects.
+      // Never replay that job after lease loss; fail it closed to avoid duplicates.
+      if (job.status === "ACKNOWLEDGED" || job.attempts >= job.maxAttempts) {
         const changed = await tx.nodeAgentJob.updateMany({
-          where: { id: job.id, status: "LEASED", leaseExpiresAt: { lte: now } },
+          where: { id: job.id, status: job.status, leaseExpiresAt: { lte: now } },
           data: {
             status: "DEAD",
             leaseTokenHash: null,
             leaseExpiresAt: null,
-            lastErrorCode: "LEASE_EXPIRED_MAX_ATTEMPTS",
-            lastError: "Agent job lease expired after the maximum number of attempts",
+            lastErrorCode: job.status === "ACKNOWLEDGED" ? "ACKNOWLEDGED_LEASE_EXPIRED" : "LEASE_EXPIRED_MAX_ATTEMPTS",
+            lastError: job.status === "ACKNOWLEDGED" ? "Acknowledged job lost its agent lease; automatic replay was suppressed to prevent duplicate side effects" : "Agent job lease expired after the maximum number of attempts",
           },
         });
         if (changed.count) {
           dead += 1;
           await tx.minecraftServerOperation.updateMany({
             where: { id: job.operationId, status: { in: ["QUEUED", "RUNNING"] } },
-            data: { status: "FAILED", errorCode: "AGENT_JOB_EXHAUSTED", errorMessage: "Node agent did not acknowledge the job before its lease expired", finishedAt: now },
+            data: { status: "FAILED", errorCode: job.status === "ACKNOWLEDGED" ? "AGENT_JOB_LEASE_LOST" : "AGENT_JOB_EXHAUSTED", errorMessage: job.status === "ACKNOWLEDGED" ? "Acknowledged operation lost its agent lease; automatic replay was suppressed" : "Node agent did not acknowledge the job before its lease expired", finishedAt: now },
           });
         }
       } else {
