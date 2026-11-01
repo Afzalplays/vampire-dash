@@ -29,11 +29,18 @@ export const operationRoutes: FastifyPluginAsync = async (app) => {
     const body = operationRequest.safeParse(request.body);
     if (!params.success || !body.success) return reply.code(400).send({ error: "Invalid server operation", details: body.success ? undefined : body.error.flatten() });
 
-    const server = await prisma.minecraftServer.findFirst({
-      where: { id: params.data.serverId, ownerId: user.id },
-      select: { id: true, status: true },
+    const server = await prisma.minecraftServer.findUnique({
+      where: { id: params.data.serverId },
+      select: { id: true, ownerId: true, status: true },
     });
     if (!server) return reply.code(404).send({ error: "Server not found" });
+    const isOwner = server.ownerId === user.id;
+    const membership = isOwner ? null : await prisma.minecraftServerSubuser.findUnique({
+      where: { serverId_userId: { serverId: server.id, userId: user.id } },
+      select: { power: true, manageSettings: true },
+    });
+    const allowed = isOwner || (membership && (body.data.type === "UPDATE_PROPERTIES" ? membership.manageSettings : membership.power));
+    if (!allowed) return reply.code(403).send({ error: "You do not have permission for this operation" });
 
     const existing = await prisma.minecraftServerOperation.findUnique({ where: { idempotencyKey: body.data.idempotencyKey } });
     if (existing) {
@@ -91,13 +98,13 @@ export const operationRoutes: FastifyPluginAsync = async (app) => {
     if (!user) return;
     const params = z.object({ serverId: z.string().min(1).max(128) }).safeParse(request.params);
     if (!params.success) return reply.code(400).send({ error: "Invalid server ID" });
-    const server = await prisma.minecraftServer.findFirst({
-      where: { id: params.data.serverId, ownerId: user.id },
-      select: { id: true },
-    });
+    const server = await prisma.minecraftServer.findUnique({ where: { id: params.data.serverId }, select: { id: true, ownerId: true } });
     if (!server) return reply.code(404).send({ error: "Server not found" });
+    const isOwner = server.ownerId === user.id;
+    const membership = isOwner ? null : await prisma.minecraftServerSubuser.findUnique({ where: { serverId_userId: { serverId: server.id, userId: user.id } }, select: { viewConsole: true } });
+    if (!isOwner && !membership?.viewConsole) return reply.code(403).send({ error: "You do not have permission to view operations" });
     const operations = await prisma.minecraftServerOperation.findMany({
-      where: { serverId: server.id, actorUserId: user.id },
+      where: { serverId: server.id },
       select: { id: true, type: true, status: true, payload: true, result: true, errorCode: true, errorMessage: true, createdAt: true, startedAt: true, finishedAt: true },
       orderBy: { createdAt: "desc" },
       take: 50,

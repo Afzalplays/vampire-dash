@@ -29,7 +29,7 @@
 - [ ] Backup, restore and scheduled retention
 
 ## Customer and admin experience
-- [ ] Customer server list and server detail views backed by API
+- [x] Owner-managed server subusers with granular permissions and audited access revocation (available to free server owners)\n- [ ] Customer server list and server detail views backed by API
 - [ ] Admin node, allocation, user and server management
 - [x] Database-backed plan catalogue and customer entitlement read APIs
 - [ ] Admin plan CRUD UI and plan purchase/renewal flow

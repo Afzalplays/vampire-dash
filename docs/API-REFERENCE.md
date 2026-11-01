@@ -44,3 +44,11 @@ Catalogue records default to disabled. These endpoints store metadata only; they
 - `GET /servers/:serverId/operations` — owner-only operation history (latest 50).
 
 Operation requests are persisted and audited, but are not executed yet. Only allowlisted server properties are accepted; arbitrary file paths, shell commands, URLs and container arguments are rejected. A node-agent dispatcher/worker must be deployed before these requests can change a running server.
+
+## Server subusers
+- `GET /servers/:serverId/subusers` — owner-only list of collaborators and permissions.
+- `POST /servers/:serverId/subusers` — owner-only add an existing active, email-verified account by email. Optional permissions: `viewConsole`, `power`, `manageFiles`, `manageBackups`, `manageSettings`.
+- `PATCH /servers/:serverId/subusers/:subuserId` — owner-only update permissions.
+- `DELETE /servers/:serverId/subusers/:subuserId` — owner-only revoke access.
+
+Subusers cannot manage other subusers or change ownership. Power permission authorizes queued start/stop/restart requests; settings permission authorizes allowlisted property updates; console permission authorizes operation history viewing. File and backup permissions are stored for their future APIs. Free server owners can use subusers; these endpoints do not require a paid entitlement. All changes are audited.
