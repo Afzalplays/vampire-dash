@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 type Server = {
   id: string; name: string; software: string; version: string; memoryMb: number;
-  diskMb: number; cpuPercent: number; status: string; expiresAt: string | null;
+  diskMb: number; cpuPercent: number; status: string; expiresAt: string | null; allocation: { port: number; protocol: string } | null;
   node: { name: string; location: string; healthStatus: string; lastSeenAt: string | null } | null;
   access: { role: string; permissions: Record<string, boolean> };
 };
@@ -94,7 +94,7 @@ export default function ServersPage() {
           <div style={{display:"flex",justifyContent:"space-between",gap:10}}><h3 style={{margin:"0 0 14px"}}>{server.name}</h3><span style={{fontSize:11,color:server.status==="RUNNING"?"#86efac":"#fbbf24"}}>{pretty(server.status)}</span></div>
           <p style={{color:"#a1a1aa",fontSize:13}}>{pretty(server.software)} · {server.version}</p>
           <div style={{display:"flex",gap:18,fontSize:13}}><span>{mb(server.memoryMb)} RAM</span><span>{mb(server.diskMb)} Disk</span><span>{server.cpuPercent}% CPU</span></div>
-          <p style={{color:"#a1a1aa",fontSize:12,marginBottom:0}}>{server.node ? `${server.node.name} · ${server.node.location} · ${pretty(server.node.healthStatus)}` : "Node not assigned"}</p>
+          <p style={{color:"#a1a1aa",fontSize:12,marginBottom:0}}>{server.node ? `${server.node.name} · ${server.node.location} · ${pretty(server.node.healthStatus)}` : "Node not assigned"}</p><p style={{color:"#a1a1aa",fontSize:12,marginTop:6,marginBottom:0}}>{server.allocation ? `Connect: ${server.node?.name || "node"}:${server.allocation.port}` : "Port not allocated"}</p>
           <p style={{color:"#71717a",fontSize:11,marginBottom:0}}>{server.access.role==="OWNER"?"Owner access":"Shared access"}</p>
         </article>)}</div>}
       </section>
