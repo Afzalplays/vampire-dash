@@ -178,3 +178,63 @@ func advanceOperationJournal(path string, next operationJournalRecord) error {
 	}
 	return nil
 }
+
+ 
+// latestOperationJournalRecords returns the last durable state for each job.
+// It is intended for recovery/reconciliation code; it never authorizes replay.
+func latestOperationJournalRecords(path string) (map[string]operationJournalRecord, error) {
+	if path == "" || !filepath.IsAbs(path) {
+		return nil, errors.New("operation journal path must be absolute")
+	}
+	file, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
+	if err != nil {
+		return nil, fmt.Errorf("open operation journal for recovery: %w", err)
+	}
+	defer file.Close()
+	if err := syscall.Flock(int(file.Fd()), syscall.LOCK_SH); err != nil {
+		return nil, fmt.Errorf("lock operation journal for recovery: %w", err)
+	}
+	defer syscall.Flock(int(file.Fd()), syscall.LOCK_UN)
+	info, err := file.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("stat operation journal for recovery: %w", err)
+	}
+	if !info.Mode().IsRegular() || info.Size() > maxOperationJournalBytes {
+		return nil, errors.New("operation journal is not a valid regular file")
+	}
+	latest := make(map[string]operationJournalRecord)
+	if _, err := file.Seek(0, 0); err != nil {
+		return nil, fmt.Errorf("rewind operation journal for recovery: %w", err)
+	}
+	scanner := bufio.NewScanner(file)
+	scanner.Buffer(make([]byte, 4096), maxJournalResultBytes+4096)
+	for scanner.Scan() {
+		var record operationJournalRecord
+		if err := json.Unmarshal(scanner.Bytes(), &record); err != nil || validateOperationJournalRecord(record) != nil {
+			return nil, errors.New("operation journal is corrupt; recovery is blocked")
+		}
+		previous, exists := latest[record.JobID]
+		if !exists {
+			if record.Stage != stageAccepted {
+				return nil, errors.New("operation journal history is incomplete; recovery is blocked")
+			}
+		} else {
+			if previous.NodeID != record.NodeID || previous.Nonce != record.Nonce || previous.IdentityHash != record.IdentityHash {
+				return nil, errors.New("operation journal identity conflict; recovery is blocked")
+			}
+			oldStage, newStage := operationStageNumber(previous.Stage), operationStageNumber(record.Stage)
+			if newStage == oldStage {
+				if previous.ResultHash != record.ResultHash || string(previous.Result) != string(record.Result) {
+					return nil, errors.New("operation journal contains contradictory state; recovery is blocked")
+				}
+			} else if newStage != oldStage+1 {
+				return nil, errors.New("operation journal transition history is invalid; recovery is blocked")
+			}
+		}
+		latest[record.JobID] = record
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("read operation journal for recovery: %w", err)
+	}
+	return latest, nil
+}
