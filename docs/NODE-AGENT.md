@@ -2,10 +2,9 @@
 
 The node agent is a separate Go service installed on each Minecraft compute node.
 It provides secure HTTPS/mTLS connectivity, authenticated status and read-only host
-capacity telemetry. An explicitly opt-in outbound worker can claim signed jobs and
-perform START/STOP/RESTART against an existing Docker container only when exactly
-one container has the panel-owned server ID label. It does not yet provision containers,
-assign ports, mount customer data or expose Docker over HTTP.
+capacity telemetry. An explicitly opt-in outbound worker can claim signed jobs, provision
+Java Minecraft containers from digest-pinned official images, and perform START/STOP/RESTART
+against containers with the panel-owned server and node labels. It never exposes Docker over HTTP.
 
 ## Security controls
 
@@ -69,9 +68,9 @@ go build -o vampire-node-agent .
 
 Job execution is disabled unless `AGENT_ENABLE_JOB_EXECUTION=true` is explicitly set. When enabled, the agent requires an HTTPS panel URL, a persistent non-root data directory, and an existing local Docker Unix socket. The panel bearer token is also used to verify the signed job envelope. The worker persists replay and operation journals before acknowledging jobs, renews leases while actions run, and refuses new work when an operation is uncertain.
 
-The current Docker adapter supports desired-state START and STOP plus a stop/start RESTART against exactly one container labelled `com.vampirenodes.server_id=<signed serverId>`. It re-inspects the container label before acting and verifies the resulting state. It never accepts a container ID or shell command from the job payload. `UPDATE_PROPERTIES` remains disabled.
+The Docker adapter supports `PROVISION_SERVER`, desired-state START/STOP and stop/start RESTART. Provisioning accepts only `itzg/minecraft-server` images pinned by SHA-256 digest and allowlisted Java software. It publishes the reserved TCP port, applies Docker memory and NanoCPU limits, requests a per-container writable-layer disk quota with `HostConfig.StorageOpt`, drops Linux capabilities, enables `no-new-privileges`, and applies a PID limit. It inspects the created container and verifies ownership labels, limits and port mapping before starting it. If the Docker storage driver cannot enforce the requested disk quota, provisioning fails closed. Container data currently lives in the container writable layer; deleting the container would delete server data, so deletion is not exposed.
 
-**Do not enable the worker on customer nodes yet unless the containers were provisioned by a trusted process that assigns the correct immutable label.** The repository does not yet have the container provisioning, CPU/RAM/disk quota, port allocation, or filesystem isolation path. A label alone is not a complete tenant-isolation boundary.
+The worker remains disabled by default. Before enabling it for customers, configure Docker `overlay2` on XFS with project quotas (`pquota`/`prjquota`), verify per-container `StorageOpt` limits on the node, open the configured TCP allocation range in the host firewall, and validate the node with the admin mTLS health check. `BEDROCK`, console, file manager, backups, restore and `UPDATE_PROPERTIES` remain unavailable.
 
 ## Endpoints
 
@@ -110,4 +109,4 @@ curl --cacert /etc/vampire-panel/pki/node-agent-ca.crt \
 
 ## Remaining work
 
-Trusted container provisioning, cgroup resource enforcement, disk quotas, port allocation/firewall integration, server-specific filesystem isolation, WebSocket console, file transfer, backups, automated panel-side enrollment and certificate issuance/rotation are not implemented. The worker is opt-in and must remain disabled for production customer traffic until those isolation and integration gates pass.
+Remaining work: server-specific bind-mounted filesystem isolation and safe deletion, console, file manager, backup/restore, Bedrock runtime, verified properties adapter, automated panel-side enrollment and certificate issuance/rotation. Port allocation and Docker port publication are implemented; the host firewall range must still be configured by the operator. Keep the worker disabled until Docker disk quota support and firewall access are verified on each node.
