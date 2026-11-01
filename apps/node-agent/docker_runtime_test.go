@@ -155,7 +155,7 @@ func TestDockerRuntimeProvisionsDigestPinnedContainerWithEnforcedLimitsAndPort(t
   case request.Method==http.MethodPost && request.URL.Path=="/"+dockerAPIVersion+"/images/create":
    pullSeen=true
    if request.URL.Query().Get("fromImage")!=image { t.Fatalf("wrong image pull: %s",request.URL.Query().Get("fromImage")) }
-   return dockerTestResponse(http.StatusOK,`{"status":"Downloaded"}\n`),nil
+   return dockerTestResponse(http.StatusOK,"{\"status\":\"Downloaded\"}\n"),nil
   case request.Method==http.MethodPost && request.URL.Path=="/"+dockerAPIVersion+"/containers/create":
    createSeen=true
    var body map[string]any
