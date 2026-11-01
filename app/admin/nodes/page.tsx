@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 type Node = {
-  id: string; name: string; location: string; endpoint: string; enabled: boolean;
+  id: string; name: string; location: string; endpoint: string; minecraftAddress: string | null; enabled: boolean;
   memoryMb: number; diskMb: number; reservedMemoryMb: number; reservedDiskMb: number;
   allocationStart: number; allocationEnd: number; healthStatus: string; lastSeenAt: string | null;
   agentVersion: string | null; cpuCores: number | null; lastHealthError: string | null;
@@ -28,7 +28,7 @@ export default function AdminNodesPage() {
   const [notice, setNotice] = useState("");
   const [token, setToken] = useState("");
   const [uncertain, setUncertain] = useState<Record<string, UncertainJob[]>>({});
-  const [form, setForm] = useState({ name: "", location: "India", endpoint: "", memoryMb: "8192", diskMb: "81920", allocationStart: "25565", allocationEnd: "25664" });
+  const [form, setForm] = useState({ name: "", location: "India", endpoint: "", minecraftAddress: "", memoryMb: "8192", diskMb: "81920", allocationStart: "25565", allocationEnd: "25664" });
   const load = useCallback(async () => {
     setLoading(true); setError("");
     try { const result = await api<{ nodes: Node[] }>("/admin/nodes"); setNodes(result.nodes); }
@@ -55,11 +55,11 @@ export default function AdminNodesPage() {
     event.preventDefault(); setBusy("create"); setError(""); setNotice(""); setToken("");
     try {
       const result = await api<{ node: Node; agentToken: string; warning: string }>("/admin/nodes", { method: "POST", body: JSON.stringify({
-        name: form.name, location: form.location, endpoint: form.endpoint,
+        name: form.name, location: form.location, endpoint: form.endpoint, minecraftAddress: form.minecraftAddress || undefined,
         memoryMb: Number(form.memoryMb), diskMb: Number(form.diskMb),
         allocationStart: Number(form.allocationStart), allocationEnd: Number(form.allocationEnd),
       }) });
-      setToken(result.agentToken); setNotice(result.warning); setForm((old) => ({ ...old, name: "", endpoint: "" })); await load();
+      setToken(result.agentToken); setNotice(result.warning); setForm((old) => ({ ...old, name: "", endpoint: "", minecraftAddress: "" })); await load();
     } catch (e) { setError(e instanceof Error ? e.message : "Node registration failed"); }
     finally { setBusy(""); }
   }
@@ -79,7 +79,7 @@ export default function AdminNodesPage() {
         <form onSubmit={createNode} style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 10 }}>
           <label style={label}>Node name<input required minLength={2} maxLength={64} style={field} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}/></label>
           <label style={label}>Location<input required minLength={2} maxLength={64} style={field} value={form.location} onChange={e => setForm({ ...form, location: e.target.value })}/></label>
-          <label style={{ ...label, gridColumn: "span 2" }}>HTTPS agent endpoint<input required type="url" placeholder="https://node.example.com:8081" style={field} value={form.endpoint} onChange={e => setForm({ ...form, endpoint: e.target.value })}/></label>
+          <label style={{ ...label, gridColumn: "span 2" }}>HTTPS agent endpoint<input required type="url" placeholder="https://node.example.com:8081" style={field} value={form.endpoint} onChange={e => setForm({ ...form, endpoint: e.target.value })}/></label><label style={label}>Public Minecraft address<input placeholder="node.example.com or public IP" style={field} value={form.minecraftAddress} onChange={e => setForm({ ...form, minecraftAddress: e.target.value })}/></label>
           <label style={label}>RAM (MiB)<input required type="number" min="1" style={field} value={form.memoryMb} onChange={e => setForm({ ...form, memoryMb: e.target.value })}/></label>
           <label style={label}>Disk (MiB)<input required type="number" min="1" style={field} value={form.diskMb} onChange={e => setForm({ ...form, diskMb: e.target.value })}/></label>
           <label style={label}>First TCP port<input required type="number" min="1024" max="65535" style={field} value={form.allocationStart} onChange={e => setForm({ ...form, allocationStart: e.target.value })}/></label>
@@ -90,7 +90,7 @@ export default function AdminNodesPage() {
       <section style={{ display: "grid", gap: 12 }}>
         {loading ? <p style={{ color: "#a1a1aa" }}>Loading nodes…</p> : nodes.length === 0 ? <div style={panel}>No nodes registered yet.</div> : nodes.map(node => <article key={node.id} style={panel}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
-            <div><h2 style={{ margin: "0 0 6px", fontSize: 19 }}>{node.name}</h2><p style={{ margin: 0, color: "#a1a1aa", fontSize: 13 }}>{node.location} · {node.endpoint}</p><p style={{ margin: "8px 0", fontSize: 13 }}>Health: <b style={{ color: node.healthStatus === "ONLINE" ? "#86efac" : "#fbbf24" }}>{node.healthStatus}</b> · {node.enabled ? "Enabled" : "Disabled"} · Agent {node.agentVersion || "unknown"}</p></div>
+            <div><h2 style={{ margin: "0 0 6px", fontSize: 19 }}>{node.name}</h2><p style={{ margin: 0, color: "#a1a1aa", fontSize: 13 }}>{node.location} · Agent: {node.endpoint} · Minecraft: {node.minecraftAddress || "not set"}</p><p style={{ margin: "8px 0", fontSize: 13 }}>Health: <b style={{ color: node.healthStatus === "ONLINE" ? "#86efac" : "#fbbf24" }}>{node.healthStatus}</b> · {node.enabled ? "Enabled" : "Disabled"} · Agent {node.agentVersion || "unknown"}</p></div>
             <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
               <button style={action} disabled={!!busy} onClick={() => void run(node.id, "check")}>Check mTLS</button>
               {node.enabled ? <button style={action} disabled={!!busy} onClick={() => void run(node.id, "disable")}>Disable</button> : <button style={action} disabled={!!busy || node.healthStatus !== "ONLINE"} onClick={() => void run(node.id, "enable")}>Enable</button>}
