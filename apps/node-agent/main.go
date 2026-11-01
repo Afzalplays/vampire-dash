@@ -12,8 +12,10 @@ import (
  "log"
  "net"
  "net/http"
+ "net/url"
  "os"
  "os/signal"
+ "path/filepath"
  "runtime"
  "strings"
  "syscall"
@@ -28,6 +30,11 @@ type config struct {
  TLSKeyFile string
  ClientCAFile string
  DataDirectory string
+ EnableJobExecution bool
+ PanelAPIURL string
+ DockerSocket string
+ JobPollInterval time.Duration
+ LeaseRenewInterval time.Duration
 }
 type statusResponse struct {
  Status string `json:"status"`
@@ -57,9 +64,26 @@ func loadConfig() (config, error) {
   TLSKeyFile: strings.TrimSpace(os.Getenv("AGENT_TLS_KEY")),
   ClientCAFile: strings.TrimSpace(os.Getenv("AGENT_CLIENT_CA")),
   DataDirectory: strings.TrimSpace(os.Getenv("AGENT_DATA_DIR")),
+  PanelAPIURL: strings.TrimSpace(os.Getenv("PANEL_API_URL")),
+  DockerSocket: strings.TrimSpace(os.Getenv("AGENT_DOCKER_SOCKET")),
  }
  if c.ListenAddress == "" { c.ListenAddress = "127.0.0.1:8081" }
  if c.DataDirectory == "" { c.DataDirectory = "/" }
+ enableJobs := strings.TrimSpace(os.Getenv("AGENT_ENABLE_JOB_EXECUTION"))
+ if enableJobs != "" && enableJobs != "true" && enableJobs != "false" { return c, errors.New("AGENT_ENABLE_JOB_EXECUTION must be true or false") }
+ c.EnableJobExecution = enableJobs == "true"
+ pollSeconds := 5
+ if raw := strings.TrimSpace(os.Getenv("AGENT_JOB_POLL_SECONDS")); raw != "" { parsed, parseErr := parseUint(raw); if parseErr != nil || parsed < 1 || parsed > 60 { return c, errors.New("AGENT_JOB_POLL_SECONDS must be between 1 and 60") }; pollSeconds = int(parsed) }
+ renewSeconds := 20
+ if raw := strings.TrimSpace(os.Getenv("AGENT_LEASE_RENEW_SECONDS")); raw != "" { parsed, parseErr := parseUint(raw); if parseErr != nil || parsed < 1 || parsed > 30 { return c, errors.New("AGENT_LEASE_RENEW_SECONDS must be between 1 and 30") }; renewSeconds = int(parsed) }
+ c.JobPollInterval = time.Duration(pollSeconds) * time.Second
+ c.LeaseRenewInterval = time.Duration(renewSeconds) * time.Second
+ if c.EnableJobExecution {
+  u, parseErr := url.Parse(c.PanelAPIURL)
+  if parseErr != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" { return c, errors.New("PANEL_API_URL must be a valid HTTPS URL") }
+  if c.DockerSocket == "" { c.DockerSocket = "/var/run/docker.sock" }
+  if !filepath.IsAbs(c.DataDirectory) || c.DataDirectory == "/" { return c, errors.New("AGENT_DATA_DIR must be an explicit persistent directory when job execution is enabled") }
+ }
  if _, _, err := net.SplitHostPort(c.ListenAddress); err != nil { return c, errors.New("AGENT_LISTEN must be host:port") }
  if c.NodeID == "" { return c, errors.New("AGENT_NODE_ID is required") }
  if len(c.AgentToken) < 32 { return c, errors.New("AGENT_TOKEN must contain at least 32 characters") }
@@ -175,6 +199,24 @@ func newHandler(c config) http.Handler {
  return mux
 }
 
+func startJobWorker(ctx context.Context, c config) error {
+ if !c.EnableJobExecution { return nil }
+ if err := os.MkdirAll(c.DataDirectory, 0700); err != nil { return fmt.Errorf("create agent data directory: %w", err) }
+ if err := os.Chmod(c.DataDirectory, 0700); err != nil { return fmt.Errorf("secure agent data directory: %w", err) }
+ info, err := os.Lstat(c.DataDirectory)
+ if err != nil { return fmt.Errorf("inspect agent data directory: %w", err) }
+ if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 { return errors.New("AGENT_DATA_DIR must be a real directory, not a symlink") }
+ docker, err := newDockerRuntime(c.DockerSocket)
+ if err != nil { return fmt.Errorf("configure Docker runtime: %w", err) }
+ panel, err := newPanelClient(c.PanelAPIURL, c.AgentToken)
+ if err != nil { return fmt.Errorf("configure panel job client: %w", err) }
+ poller := &nodeJobPoller{panel: panel, executor: docker, nodeID: c.NodeID, signingKey: c.AgentToken, journalPath: filepath.Join(c.DataDirectory, "jobs.replay.jsonl"), interval: c.JobPollInterval, leaseRenewInterval: c.LeaseRenewInterval}
+ if err := poller.validate(); err != nil { return err }
+ go func() { if err := poller.run(ctx); err != nil && !errors.Is(err, context.Canceled) { log.Printf("node job worker stopped: %v", err) } }()
+ log.Printf("node job worker enabled; only uniquely labelled server containers can receive START/STOP")
+ return nil
+}
+
 func main() {
  c, err := loadConfig(); if err != nil { log.Fatalf("configuration error: %v", err) }
  tlsConfig, err := loadTLSConfig(c); if err != nil { log.Fatalf("TLS configuration error: %v", err) }
@@ -185,6 +227,9 @@ func main() {
  }
  signals := make(chan os.Signal, 1); signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
  go func() { <-signals; ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second); defer cancel(); if err := srv.Shutdown(ctx); err != nil { log.Printf("graceful shutdown: %v", err) } }()
+ workerCtx, cancelWorker := context.WithCancel(context.Background())
+ defer cancelWorker()
+ if err := startJobWorker(workerCtx, c); err != nil { log.Fatalf("job worker configuration error: %v", err) }
  log.Printf("Vampire Dash node agent %s serving HTTPS+mTLS on %s", version, c.ListenAddress)
  if err := srv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed { log.Fatalf("server failed: %v", err) }
 }
