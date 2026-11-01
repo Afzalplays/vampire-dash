@@ -46,7 +46,8 @@ func stableNodeJobIdentity(job signedNodeJob) ([]byte, error) {
 		ID string `json:"id"`
 		NodeID string `json:"nodeId"`
 		Nonce string `json:"nonce"`
+		ServerID string `json:"serverId"`
 		Action string `json:"action"`
 		Payload json.RawMessage `json:"payload"`
-	}{job.ID, job.NodeID, job.Nonce, job.Action, canonicalPayload})
+	}{job.ID, job.NodeID, job.Nonce, job.ServerID, job.Action, canonicalPayload})
 }
