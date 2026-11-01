@@ -6,6 +6,7 @@ import (
  "net/http/httptest"
  "os"
  "testing"
+ "time"
 )
 
 const testAgentToken = "01234567890123456789012345678901"
