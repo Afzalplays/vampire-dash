@@ -45,8 +45,8 @@ const goJSONString = (value: string): string =>
     .replace(/&/g, "\\u0026")
     .replace(/</g, "\\u003c")
     .replace(/>/g, "\\u003e")
-    .replace(/\\u2028/g, "\\u2028")
-    .replace(/\\u2029/g, "\\u2029");
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
 
 function nodeOperationIdentityHash(job: {
   id: string; nodeId: string; nonce: string;
