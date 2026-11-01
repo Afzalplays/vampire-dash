@@ -2,15 +2,28 @@
 
 ## Current implementation status
 
-The agent currently exposes read-only health and capacity telemetry. The signed
-job envelope validator in `jobs.go` is a tested protocol foundation only:
-there is no job HTTP endpoint, polling loop, database lease worker, replay store,
-container runtime, or command execution. The panel must continue to report
+The agent currently exposes read-only health and capacity telemetry. The signed job envelope validator in `jobs.go` and durable replay journal in
+`replay_store.go` are tested protocol foundations. The agent still has no job
+HTTP polling loop, container runtime, or command execution. The panel must continue to report
 server operations as `NOT_DISPATCHED`.
 
-The API now has a durable `NodeAgentJob` outbox record per operation, bound to
+The API has a durable `NodeAgentJob` outbox record per operation, bound to
 one node, with a unique nonce, bounded retry count, lease token hash and lease
-expiry fields. The API creates an outbox row in the same transaction as each accepted operation. The `worker:agent-jobs` recovery process requeues expired leases with bounded exponential backoff and marks exhausted jobs DEAD/operations FAILED. It does not claim, dispatch, or execute jobs; actual agent delivery remains disabled.
+expiry fields. It exposes node-authenticated claim, acknowledgement, renewal and
+result endpoints. Claims use an atomic `FOR UPDATE SKIP LOCKED` selection and
+sign the exact serialized envelope with a per-node HMAC key. Lease tokens are
+random, stored only as SHA-256 hashes, and required for acknowledgement,
+renewal and result reporting. The API validates queued payloads against strict
+action schemas before signing. The `worker:agent-jobs` recovery process retries
+expired pre-ack leases with bounded backoff and fails expired acknowledged
+leases without replaying potentially side-effecting work.
+
+The Go agent has strict signed-envelope validation and an append-only,
+fsync-backed replay journal protected by a file lock. Replay storage is a
+validation foundation only: it is not yet connected to a job polling loop.
+The existing panel-to-node mTLS client currently fetches read-only metrics;
+there is no job HTTP client or execution runtime. Actual job delivery and
+execution remain disabled.
 
 ## Envelope
 
@@ -41,11 +54,15 @@ variable injection and user-defined executable commands are forbidden.
 
 ## Required before enabling dispatch
 
-1. Persist agent-side nonce replay protection across restarts and atomically
-   reject duplicate job IDs/nonces.
-2. Implement a trusted dispatcher that atomically claims eligible PENDING jobs, issues short leases, and reconciles signed acknowledgements. Expired-lease recovery and bounded backoff are implemented; heartbeat, cancellation semantics and result reconciliation remain pending.
-3. Authenticate node identity and rotate per-node HMAC keys; retain mandatory
-   mTLS certificate verification.
+1. Integrate the durable agent replay journal with a job HTTP client. Design
+   idempotent acknowledgement recovery for a crash after journal fsync but
+   before acknowledgement; never execute a duplicate side effect.
+2. Implement an agent polling client that sends the exact signed-body bytes,
+   validates the panel's mTLS identity, acknowledges only after durable
+   acceptance, renews active leases and reports bounded results. API-side
+   claim/ack/renew/result and lease recovery are implemented.
+3. Add node credential rotation and revocation; retain mandatory mTLS
+   certificate verification and per-node HMAC keys.
 4. Add a typed runtime adapter that maps actions to fixed container APIs; never
    invoke a shell or accept user-controlled container identifiers/options.
 5. Enforce server-to-node ownership, per-server resource boundaries, rate
