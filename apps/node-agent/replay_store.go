@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"errors"
+	"regexp"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,25 +15,61 @@ import (
 const maxReplayJournalBytes = 32 * 1024 * 1024
 
 var replayJobIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{16,128}$`)
-var replayNoncePattern = regexp.MustCompile(`^[A-Fa-f0-9]{32,128}$`)
+var replayNoncePattern = regexp.MustCompile(`^[A-Fa-f0-9]{32,128}package main
+
+import (
+	"bufio"
+	"encoding/json"
+	"errors"
+	"regexp"
+	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
+	"syscall"
+)
+
+const maxReplayJournalBytes = 32 * 1024 * 1024
+
+var replayJobIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{16,128}$`)
+)
+var replayBodyHashPattern = regexp.MustCompile(`^[a-f0-9]{64}package main
+
+import (
+	"bufio"
+	"encoding/json"
+	"errors"
+	"regexp"
+	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
+	"syscall"
+)
+
+const maxReplayJournalBytes = 32 * 1024 * 1024
+
+var replayJobIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{16,128}$`)
+)
 
 type replayRecord struct {
 	JobID string `json:"jobId"`
 	Nonce string `json:"nonce"`
+	BodyHash string `json:"bodyHash"`
 }
 
-// consumeJobReplayKey durably reserves a job ID and nonce before any future
-// handler is allowed to acknowledge or execute the job. The journal is
-// append-only; a full or corrupt journal fails closed.
-func consumeJobReplayKey(journalPath, jobID, nonce string) error {
-	if !replayJobIDPattern.MatchString(jobID) || !replayNoncePattern.MatchString(nonce) {
-		return errors.New("invalid replay key")
+// consumeJobReplayKey durably reserves a job ID, nonce and exact signed body.
+// An identical retry returns duplicate=true so callers may re-acknowledge it,
+// but must never execute it again. Conflicting reuse fails closed.
+func consumeJobReplayKey(journalPath, jobID, nonce, bodyHash string) (bool, error) {
+	if !replayJobIDPattern.MatchString(jobID) || !replayNoncePattern.MatchString(nonce) || !replayBodyHashPattern.MatchString(bodyHash) {
+		return false, errors.New("invalid replay key")
 	}
 	if journalPath == "" || !filepath.IsAbs(journalPath) {
-		return errors.New("replay journal path must be absolute")
+		return false, errors.New("replay journal path must be absolute")
 	}
 	if err := os.MkdirAll(filepath.Dir(journalPath), 0700); err != nil {
-		return fmt.Errorf("create replay journal directory: %w", err)
+		return false, fmt.Errorf("create replay journal directory: %w", err)
 	}
 	file, err := os.OpenFile(journalPath, os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil { return fmt.Errorf("open replay journal: %w", err) }
@@ -60,7 +97,7 @@ func consumeJobReplayKey(journalPath, jobID, nonce string) error {
 		}
 	}
 	if err := scanner.Err(); err != nil { return fmt.Errorf("read replay journal: %w", err) }
-	encoded, err := json.Marshal(replayRecord{JobID: jobID, Nonce: nonce})
+	encoded, err := json.Marshal(replayRecord{JobID: jobID, Nonce: nonce, BodyHash: bodyHash})
 	if err != nil { return fmt.Errorf("encode replay record: %w", err) }
 	if info.Size()+int64(len(encoded)+1) > maxReplayJournalBytes {
 		return errors.New("replay journal capacity reached; refusing new jobs")
@@ -68,5 +105,5 @@ func consumeJobReplayKey(journalPath, jobID, nonce string) error {
 	if _, err := file.Seek(0, 2); err != nil { return fmt.Errorf("seek replay journal: %w", err) }
 	if _, err := file.Write(append(encoded, '\n')); err != nil { return fmt.Errorf("append replay record: %w", err) }
 	if err := file.Sync(); err != nil { return fmt.Errorf("sync replay journal: %w", err) }
-	return nil
+	return false, nil
 }

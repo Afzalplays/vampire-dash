@@ -1,17 +1,19 @@
 package main
 
-import "time"
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"time"
+)
 
-// acceptSignedNodeJob validates an authenticated envelope before durably
-// consuming its replay key. Callers must not acknowledge or execute a job
-// unless this function returns successfully.
-func acceptSignedNodeJob(body []byte, signature, secret, nodeID, journalPath string, now time.Time) (signedNodeJob, error) {
+// acceptSignedNodeJob validates the exact signed bytes and durably records them.
+// duplicate=true means the same envelope was already accepted: callers may
+// retry its acknowledgement, but MUST NOT execute the job again.
+func acceptSignedNodeJob(body []byte, signature, secret, nodeID, journalPath string, now time.Time) (signedNodeJob, bool, error) {
 	job, err := validateSignedNodeJob(body, signature, secret, nodeID, now)
-	if err != nil {
-		return signedNodeJob{}, err
-	}
-	if err := consumeJobReplayKey(journalPath, job.ID, job.Nonce); err != nil {
-		return signedNodeJob{}, err
-	}
-	return job, nil
+	if err != nil { return signedNodeJob{}, false, err }
+	hash := sha256.Sum256(body)
+	duplicate, err := consumeJobReplayKey(journalPath, job.ID, job.Nonce, hex.EncodeToString(hash[:]))
+	if err != nil { return signedNodeJob{}, false, err }
+	return job, duplicate, nil
 }

@@ -19,8 +19,12 @@ expired pre-ack leases with bounded backoff and fails expired acknowledged
 leases without replaying potentially side-effecting work.
 
 The Go agent has strict signed-envelope validation and an append-only,
-fsync-backed replay journal protected by a file lock. Replay storage is a
-validation foundation only: it is not yet connected to a job polling loop.
+fsync-backed replay journal protected by a file lock. The journal stores the SHA-256 digest of the exact signed body. A byte-identical
+redelivery is recognized as an already accepted duplicate, allowing a client
+to retry acknowledgement after a crash without treating the job as new. Reuse
+of a job ID or nonce with different content fails closed. A caller receiving a
+duplicate must never execute it; it may only retry the acknowledgement. This
+journal is not yet connected to a job polling loop.
 The existing panel-to-node mTLS client currently fetches read-only metrics;
 there is no job HTTP client or execution runtime. Actual job delivery and
 execution remain disabled.
