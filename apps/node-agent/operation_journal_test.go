@@ -131,3 +131,37 @@ func TestOperationJournalRejectsSymlink(t *testing.T) {
 		t.Fatal("expected symlink rejection")
 	}
 }
+
+func TestOperationJournalRecoveryReaderReturnsLatestPendingState(t *testing.T) {
+ path := filepath.Join(t.TempDir(), "operations.jsonl")
+ accepted := operationTestRecord(stageAccepted)
+ if err := advanceOperationJournal(path, accepted); err != nil { t.Fatal(err) }
+ acked := accepted
+ acked.Stage = stageAckConfirmed
+ if err := advanceOperationJournal(path, acked); err != nil { t.Fatal(err) }
+ started := acked
+ started.Stage = stageExecutionStarted
+ if err := advanceOperationJournal(path, started); err != nil { t.Fatal(err) }
+ result := json.RawMessage(`{"status":"SUCCEEDED"}`)
+ sum := sha256.Sum256(result)
+ pending := started
+ pending.Stage, pending.Result, pending.ResultHash = stageResultPending, result, hex.EncodeToString(sum[:])
+ if err := advanceOperationJournal(path, pending); err != nil { t.Fatal(err) }
+ latest, err := latestOperationJournalRecords(path)
+ if err != nil { t.Fatal(err) }
+ got, ok := latest[accepted.JobID]
+ if !ok || got.Stage != stageResultPending || got.ResultHash != pending.ResultHash {
+  t.Fatalf("latest record=%+v, found=%v", got, ok)
+ }
+}
+
+func TestOperationJournalRecoveryReaderRejectsIncompleteHistory(t *testing.T) {
+ path := filepath.Join(t.TempDir(), "operations.jsonl")
+ skipped := operationTestRecord(stageExecutionStarted)
+ encoded, err := json.Marshal(skipped)
+ if err != nil { t.Fatal(err) }
+ if err := os.WriteFile(path, append(encoded, '\n'), 0600); err != nil { t.Fatal(err) }
+ if _, err := latestOperationJournalRecords(path); err == nil || !strings.Contains(err.Error(), "incomplete") {
+  t.Fatalf("expected incomplete history error, got %v", err)
+ }
+}
