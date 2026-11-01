@@ -273,7 +273,7 @@ func (d *dockerRuntime) provisionServer(ctx context.Context, job signedNodeJob) 
  running, err := d.inspectProvisionedContainer(ctx,created.ID,job.ServerID,job.NodeID,payload)
  if err != nil { return nil,err }
  if !running.State.Running { return nil,errors.New("provisioned Minecraft container did not reach running state") }
- return map[string]any{"state":"RUNNING","port":payload.Port,"containerId":created.ID,"diskLimitMb":payload.DiskMB,"memoryLimitMb":payload.MemoryMB,"cpuPercent":payload.CPUPercent},nil
+ return map[string]any{"state":"RUNNING","port":payload.Port,"diskLimitMb":payload.DiskMB,"memoryLimitMb":payload.MemoryMB,"cpuPercent":payload.CPUPercent},nil
 }
 
 func (d *dockerRuntime) inspectProvisionedContainer(ctx context.Context, containerID, serverID, nodeID string, payload dockerProvisionPayload) (dockerContainerInspect,error) {
