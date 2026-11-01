@@ -171,17 +171,33 @@ func TestDockerRuntimeRejectsContainerWithMismatchedInspectLabel(t *testing.T) {
 	if calls != 2 { t.Fatalf("runtime should stop after failed inspect, calls=%d", calls) }
 }
 
-func TestDockerRuntimeFailsClosedForRestartAndProperties(t *testing.T) {
+func TestDockerRuntimeFailsClosedForProperties(t *testing.T) {
 	calls := 0
 	runtime := dockerTestRuntime(func(request *http.Request) (*http.Response, error) {
 		calls++
 		return dockerTestResponse(http.StatusOK, "[]"), nil
 	})
-	for _, action := range []string{"RESTART", "UPDATE_PROPERTIES"} {
+	for _, action := range []string{"UPDATE_PROPERTIES"} {
 		_, err := runtime.Execute(context.Background(), signedNodeJob{ServerID: "server-123", Action: action, Payload: []byte("{}")})
 		if err == nil { t.Fatalf("%s should remain disabled", action) }
 	}
 	if calls != 0 { t.Fatalf("disabled actions must not contact Docker, calls=%d", calls) }
+}
+
+func TestDockerRuntimeRestartStopsThenStartsAndVerifies(t *testing.T) {
+ running := true
+ var mutations []string
+ runtime := dockerTestRuntime(func(request *http.Request) (*http.Response, error) {
+  path := request.URL.Path
+  if path == "/"+dockerAPIVersion+"/containers/json" { return dockerTestResponse(http.StatusOK, fmt.Sprintf(`[{"Id":%q,"Labels":{"%s":"server-restart"}}]`, dockerTestContainerID, dockerServerLabel)), nil }
+  if path == "/"+dockerAPIVersion+"/containers/"+dockerTestContainerID+"/json" { state := "false"; if running { state = "true" }; return dockerTestResponse(http.StatusOK, fmt.Sprintf(`{"Config":{"Labels":{"%s":"server-restart"}},"State":{"Running":%s}}`, dockerServerLabel, state)), nil }
+  if request.Method == http.MethodPost && path == "/"+dockerAPIVersion+"/containers/"+dockerTestContainerID+"/stop" { mutations = append(mutations,"STOP"); running=false; return dockerTestResponse(http.StatusNoContent,""),nil }
+  if request.Method == http.MethodPost && path == "/"+dockerAPIVersion+"/containers/"+dockerTestContainerID+"/start" { mutations = append(mutations,"START"); running=true; return dockerTestResponse(http.StatusNoContent,""),nil }
+  t.Fatalf("unexpected Docker request: %s %s",request.Method,request.URL.RequestURI()); return nil,fmt.Errorf("unexpected request")
+ })
+ result, err := runtime.Execute(context.Background(), signedNodeJob{ServerID:"server-restart",Action:"RESTART",Payload:[]byte("{}")})
+ if err != nil { t.Fatal(err) }
+ if result["state"] != "RUNNING" || !running || strings.Join(mutations,",") != "STOP,START" { t.Fatalf("restart not verified: result=%#v running=%v mutations=%v",result,running,mutations) }
 }
 
 func TestDockerRuntimeRejectsPowerPayloadAndUnknownAction(t *testing.T) {
