@@ -14,11 +14,11 @@ import (
 const maxClaimResponseBytes = 32 * 1024
 
 type claimResponse struct {
- Job json.RawMessage \`json:"job"\`
- SignedBody string \`json:"signedBody"\`
- Signature string \`json:"signature"\`
- LeaseToken string \`json:"leaseToken"\`
- LeaseExpiresAt time.Time \`json:"leaseExpiresAt"\`
+ Job json.RawMessage `json:"job"`
+ SignedBody string `json:"signedBody"`
+ Signature string `json:"signature"`
+ LeaseToken string `json:"leaseToken"`
+ LeaseExpiresAt time.Time `json:"leaseExpiresAt"`
 }
 
 // decodeClaimResponse preserves the exact signedBody bytes supplied by the API.
