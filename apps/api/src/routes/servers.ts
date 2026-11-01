@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
+import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { authenticate } from "../lib/authenticate.js";
@@ -55,7 +56,7 @@ export const serverRoutes: FastifyPluginAsync = async (app) => {
 
         const release = await tx.minecraftSoftwareRelease.findFirst({
           where: { software: parsed.data.software, minecraftVersion: parsed.data.version, enabled: true },
-          select: { id: true },
+          select: { id: true, dockerImage: true, javaMajor: true },
         });
         if (!release) throw new Error("SOFTWARE_RELEASE_UNAVAILABLE");
 
@@ -91,16 +92,22 @@ export const serverRoutes: FastifyPluginAsync = async (app) => {
             expiresAt: entitlement.expiresAt,
           }, select: serverSelect });
           await tx.nodePortAllocation.create({ data: { nodeId: node.id, serverId: server.id, port: allocatedPort, protocol: "TCP" } });
+          const operation = await tx.minecraftServerOperation.create({ data: {
+            serverId: server.id, actorUserId: user.id, type: "PROVISION_SERVER",
+            idempotencyKey: `provision:${server.id}`,
+            payload: { name: server.name, software: server.software, minecraftVersion: server.version, dockerImage: release.dockerImage, javaMajor: release.javaMajor, memoryMb: server.memoryMb, diskMb: server.diskMb, cpuPercent: server.cpuPercent, port: allocatedPort },
+          } });
+          await tx.nodeAgentJob.create({ data: { operationId: operation.id, nodeId: node.id, nonce: randomBytes(32).toString("hex"), status: "PENDING" } });
           const serverWithAllocation = await tx.minecraftServer.findUniqueOrThrow({ where: { id: server.id }, select: serverSelect });
           await tx.auditLog.create({ data: {
             actorUserId: user.id, action: "SERVER_CREATED", targetId: server.id,
-            details: `Created server ${server.name} on node ${node.name} using entitlement ${entitlement.id}; reserved TCP port ${allocatedPort}; provisioning is pending`,
+            details: `Created server ${server.name} on node ${node.name} using entitlement ${entitlement.id}; reserved TCP port ${allocatedPort}; provisioning job queued`,
           } });
           return serverWithAllocation;
         }
         throw new Error("NO_NODE_CAPACITY");
       }, { isolationLevel: "Serializable", maxWait: 10000, timeout: 20000 });
-      return reply.code(202).send({ server: result, provisioning: "PENDING_AGENT_DISPATCH" });
+      return reply.code(202).send({ server: result, provisioning: "QUEUED_FOR_NODE_AGENT" });
     } catch (error) {
       const code = error instanceof Error ? error.message : "";
       if (code === "ENTITLEMENT_NOT_AVAILABLE") return reply.code(403).send({ error: "No active entitlement is available for this plan" });
