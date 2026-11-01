@@ -162,6 +162,7 @@ export const agentJobRoutes: FastifyPluginAsync = async (app) => {
         select: {
           id: true, status: true, leaseTokenHash: true, leaseExpiresAt: true,
           operationId: true, resultRequestHash: true,
+          operation: { select: { serverId: true, type: true } },
         },
       });
       if (!job) return "NOT_FOUND";
@@ -178,12 +179,16 @@ export const agentJobRoutes: FastifyPluginAsync = async (app) => {
         data: { status: body.data.status, leaseTokenHash: null, leaseExpiresAt: null, resultRequestHash: requestHash, lastErrorCode: body.data.status === "FAILED" ? body.data.errorCode : null, lastError: body.data.status === "FAILED" ? body.data.errorMessage ?? "Node agent reported operation failure" : null },
       });
       if (updated.count !== 1) return "CONFLICT";
-      await tx.minecraftServerOperation.updateMany({
+      const operationUpdate = await tx.minecraftServerOperation.updateMany({
         where: { id: job.operationId, status: "RUNNING" },
         data: body.data.status === "SUCCEEDED"
           ? { status: "SUCCEEDED", result: (body.data.result ?? {}) as Prisma.InputJsonValue, finishedAt: now, errorCode: null, errorMessage: null }
           : { status: "FAILED", result: (body.data.result ?? {}) as Prisma.InputJsonValue, errorCode: body.data.errorCode, errorMessage: body.data.errorMessage ?? "Node agent reported operation failure", finishedAt: now },
       });
+      if (operationUpdate.count !== 1) throw new Error("Operation state changed while recording node result");
+      if (job.operation.type === "PROVISION_SERVER") {
+        await tx.minecraftServer.updateMany({ where: { id: job.operation.serverId, nodeId: node.id, status: "PENDING" }, data: { status: body.data.status === "SUCCEEDED" ? "RUNNING" : "ERROR" } });
+      }
       return body.data.status;
     }, { maxWait: 10000, timeout: 15000 });
     if (outcome === "NOT_FOUND") return reply.code(404).send({ error: "Acknowledged job not found" });
@@ -294,6 +299,9 @@ export const agentJobRoutes: FastifyPluginAsync = async (app) => {
         },
       });
       if (updatedOperation.count !== 1) throw new Error("Operation changed during reconciliation");
+      if (job.operation.type === "PROVISION_SERVER") {
+        await tx.minecraftServer.updateMany({ where: { id: job.operation.serverId, nodeId: node.id, status: "PENDING" }, data: { status: terminal.status === "SUCCEEDED" ? "RUNNING" : "ERROR" } });
+      }
       return "RESULT_ACCEPTED";
     }, { maxWait: 10000, timeout: 15000 });
 
