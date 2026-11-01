@@ -25,6 +25,7 @@ type signedNodeJob struct {
 	ID        string          `json:"id"`
 	NodeID    string          `json:"nodeId"`
 	Nonce     string          `json:"nonce"`
+	ServerID  string          `json:"serverId"`
 	IssuedAt  time.Time       `json:"issuedAt"`
 	ExpiresAt time.Time       `json:"expiresAt"`
 	Action    string          `json:"action"`
@@ -76,6 +77,9 @@ func validateSignedNodeJob(body []byte, signature, secret, nodeID string, now ti
 	}
 	if !jobIDPattern.MatchString(job.ID) || !noncePattern.MatchString(job.Nonce) {
 		return job, errors.New("job ID or nonce is invalid")
+	}
+	if job.ServerID == "" || len(job.ServerID) > 128 {
+		return job, errors.New("server identity is invalid")
 	}
 	if job.NodeID != nodeID {
 		return job, errors.New("job is addressed to another node")
