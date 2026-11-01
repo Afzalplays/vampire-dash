@@ -24,11 +24,11 @@ const goJSONString = (value: string): string =>
     .replace(/\u2029/g, "\\u2029");
 
 export function nodeOperationIdentityHash(job: {
-  id: string; nodeId: string; nonce: string; serverId: string;
-  operation: { type: string; payload: unknown };
+  id: string; nodeId: string; nonce: string;
+  operation: { serverId: string; type: string; payload: unknown };
 }): string {
   const payload = goCompatibleJson(job.operation.payload);
-  const identity = `{"id":${goJSONString(job.id)},"nodeId":${goJSONString(job.nodeId)},"nonce":${goJSONString(job.nonce)},"serverId":${goJSONString(job.serverId)},"action":${goJSONString(job.operation.type)},"payload":${payload}}`;
+  const identity = `{"id":${goJSONString(job.id)},"nodeId":${goJSONString(job.nodeId)},"nonce":${goJSONString(job.nonce)},"serverId":${goJSONString(job.operation.serverId)},"action":${goJSONString(job.operation.type)},"payload":${payload}}`;
   return createHash("sha256").update(identity, "utf8").digest("hex");
 }
 
