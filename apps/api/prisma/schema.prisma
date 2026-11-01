@@ -279,7 +279,6 @@ model MinecraftServer {
   owner      User         @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   node       MinecraftNode? @relation(fields: [nodeId], references: [id], onDelete: SetNull)
   operations MinecraftServerOperation[]
-  agentJobs  NodeAgentJob[]
   subusers   MinecraftServerSubuser[]
   @@index([ownerId, createdAt])
 }
