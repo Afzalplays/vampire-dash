@@ -92,7 +92,7 @@ describe("admin node recovery and credential routes", () => {
       assert.equal(uncertain.statusCode, 200, uncertain.body);
       assert.equal(uncertain.json().jobs.length, 1);
       assert.equal(uncertain.json().jobs[0].id, job.id);
-      assert.equal(uncertain.json().jobs[0].operation.serverId, undefined);
+      assert.equal(uncertain.json().jobs[0].operation.serverId, server.id);
       assert.match(uncertain.json().warning, /Do not retry/i);
 
       await prisma.nodeAgentJob.update({
