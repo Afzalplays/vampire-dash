@@ -127,6 +127,57 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       throw error;
     }
   });
+  app.get("/artifacts/projects", async (request, reply) => {
+    const admin = await requireAdmin(request, reply); if (!admin) return;
+    const projects = await prisma.minecraftArtifactProject.findMany({
+      select: {
+        id: true, kind: true, provider: true, providerProjectId: true, slug: true, title: true, summary: true,
+        projectUrl: true, sourceUrl: true, licenseId: true, supportedSoftware: true, supportedGameVersions: true,
+        loaders: true, enabled: true, createdAt: true, updatedAt: true,
+        files: {
+          select: { id: true, providerFileId: true, versionNumber: true, downloadUrl: true, sha256: true, sizeBytes: true, gameVersions: true, loaders: true, enabled: true, createdAt: true, updatedAt: true },
+          orderBy: { createdAt: "desc" },
+        },
+      },
+      orderBy: [{ enabled: "desc" }, { title: "asc" }],
+      take: 500,
+    });
+    return { projects: projects.map(project => ({
+      ...project,
+      files: project.files.map(file => ({ ...file, sizeBytes: file.sizeBytes?.toString() ?? null })),
+    })) };
+  });
+  app.patch("/artifacts/projects/:projectId", async (request, reply) => {
+    const admin = await requireAdmin(request, reply); if (!admin) return;
+    const params = z.object({ projectId: z.string().min(1).max(128) }).safeParse(request.params);
+    const body = z.object({ enabled: z.boolean() }).strict().safeParse(request.body);
+    if (!params.success || !body.success) return reply.code(400).send({ error: "Invalid artifact project update" });
+    const existing = await prisma.minecraftArtifactProject.findUnique({ where: { id: params.data.projectId }, select: { id: true, title: true, enabled: true } });
+    if (!existing) return reply.code(404).send({ error: "Artifact project not found" });
+    const project = await prisma.minecraftArtifactProject.update({ where: { id: existing.id }, data: body.data });
+    await prisma.auditLog.create({ data: {
+      actorUserId: admin.id, action: "ARTIFACT_PROJECT_UPDATED", targetId: project.id,
+      details: `Updated artifact project ${project.title}; enabled=${project.enabled}`,
+    } });
+    return { project };
+  });
+  app.patch("/artifacts/files/:fileId", async (request, reply) => {
+    const admin = await requireAdmin(request, reply); if (!admin) return;
+    const params = z.object({ fileId: z.string().min(1).max(128) }).safeParse(request.params);
+    const body = z.object({ enabled: z.boolean() }).strict().safeParse(request.body);
+    if (!params.success || !body.success) return reply.code(400).send({ error: "Invalid artifact file update" });
+    const existing = await prisma.minecraftArtifactFile.findUnique({
+      where: { id: params.data.fileId },
+      select: { id: true, versionNumber: true, project: { select: { title: true } } },
+    });
+    if (!existing) return reply.code(404).send({ error: "Artifact file not found" });
+    const file = await prisma.minecraftArtifactFile.update({ where: { id: existing.id }, data: body.data });
+    await prisma.auditLog.create({ data: {
+      actorUserId: admin.id, action: "ARTIFACT_FILE_UPDATED", targetId: file.id,
+      details: `Updated artifact file ${existing.versionNumber} for ${existing.project.title}; enabled=${file.enabled}`,
+    } });
+    return { file: { ...file, sizeBytes: file.sizeBytes?.toString() ?? null } };
+  });
   app.get("/users", async (request, reply) => {
     const admin = await requireAdmin(request, reply); if (!admin) return;
     const users = await prisma.user.findMany({ select: { id: true, email: true, username: true, role: true, status: true, createdAt: true }, orderBy: { createdAt: "desc" }, take: 100 });
