@@ -13,7 +13,7 @@ const provisionPayloadSchema = z.object({
   name: z.string().trim().min(3).max(32),
   software: z.enum(["VANILLA", "PAPER", "PURPUR", "FABRIC", "FORGE", "NEOFORGE", "VELOCITY", "BUNGEECORD"]),
   minecraftVersion: z.string().trim().min(1).max(32),
-  dockerImage: z.string().trim().min(3).max(255).regex(/^[A-Za-z0-9._/:@-]+$/),
+  dockerImage: z.string().trim().regex(/^(?:docker\.io\/)?itzg\/minecraft-server@sha256:[a-f0-9]{64}$/),
   javaMajor: z.number().int().min(8).max(30),
   memoryMb: z.number().int().min(256).max(4_194_304),
   diskMb: z.number().int().min(512).max(16_777_216),
