@@ -50,7 +50,7 @@ export const operationRoutes: FastifyPluginAsync = async (app) => {
       if (existing.serverId !== server.id || existing.actorUserId !== user.id || existing.type !== body.data.type) {
         return reply.code(409).send({ error: "Idempotency key was already used for a different operation" });
       }
-      return reply.send({ operation: existing, reused: true, execution: "NOT_DISPATCHED" });
+      return reply.send({ operation: existing, reused: true, execution: "QUEUED_FOR_NODE_AGENT" });
     }
 
     if (!server.nodeId) return reply.code(409).send({ error: "Server is not assigned to a node yet" });
@@ -82,12 +82,12 @@ export const operationRoutes: FastifyPluginAsync = async (app) => {
         });
         return created;
       });
-      return reply.code(202).send({ operation, reused: false, execution: "NOT_DISPATCHED" });
+      return reply.code(202).send({ operation, reused: false, execution: "QUEUED_FOR_NODE_AGENT" });
     } catch (error) {
       if (typeof error === "object" && error !== null && "code" in error && error.code === "P2002") {
         const duplicate = await prisma.minecraftServerOperation.findUnique({ where: { idempotencyKey: body.data.idempotencyKey } });
         if (duplicate && duplicate.serverId === server.id && duplicate.actorUserId === user.id && duplicate.type === body.data.type) {
-          return { operation: duplicate, reused: true, execution: "NOT_DISPATCHED" };
+          return { operation: duplicate, reused: true, execution: "QUEUED_FOR_NODE_AGENT" };
         }
         return reply.code(409).send({ error: "Idempotency key conflict" });
       }
@@ -111,6 +111,6 @@ export const operationRoutes: FastifyPluginAsync = async (app) => {
       orderBy: { createdAt: "desc" },
       take: 50,
     });
-    return { operations, execution: "NOT_DISPATCHED" };
+    return { operations, execution: "QUEUED_FOR_NODE_AGENT" };
   });
 };
