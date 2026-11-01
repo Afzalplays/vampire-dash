@@ -106,7 +106,7 @@ export const serverRoutes: FastifyPluginAsync = async (app) => {
           return serverWithAllocation;
         }
         throw new Error("NO_NODE_CAPACITY");
-      }, { isolationLevel: "Serializable", maxWait: 10000, timeout: 20000 });
+      }, { isolationLevel: "ReadCommitted", maxWait: 10000, timeout: 20000 });
       return reply.code(202).send({ server: result, provisioning: "QUEUED_FOR_NODE_AGENT" });
     } catch (error) {
       const code = error instanceof Error ? error.message : "";
