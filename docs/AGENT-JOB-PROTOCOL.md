@@ -12,7 +12,7 @@ The Go panel HTTPS client supports bounded claim, acknowledgement, renewal and r
 
 A testable polling state machine now connects the panel client contract, signature validation, durable replay journal, acknowledgement, bounded result reporting and periodic lease renewal while an executor runs. It refuses to start without a concrete executor and a bounded renewal interval. It ACKs only after the replay record is fsynced; identical redelivery retries ACK without re-executing. Renewal failure cancels the executor context and is reported as a failed operation. The poller is not wired into agent startup, and no production executor exists yet.
 
-Important remaining delivery edge cases: a lease reclaimed with a newly serialized signed envelope may conflict with the journal's exact-body replay key, and a process failure after ACK but before result reporting needs durable local pending-result recovery. These must be resolved before enabling dispatch. Long-running operations also require active lease renewal.
+The stable replay identity issue is resolved. One important delivery gap remains: a process failure after ACK but before result reporting needs durable pending-result recovery and a server-side reconciliation path. Until then, acknowledged jobs whose result cannot be reported fail closed; they are never automatically re-executed. Long-running operations also require active lease renewal.
 
 The agent currently exposes read-only health and capacity telemetry. It has no Docker runtime adapter or production server-operation execution. Customer operations must remain undispatched.
 
@@ -38,7 +38,7 @@ Raw shell strings, arbitrary URLs, Docker arguments, host paths, environment-var
 
 ## Required before enabling dispatch
 
-1. Fix stable replay identity across lease renewals/reclaims and persist pending results so ACKed work can safely recover after a process restart.
+1. Persist pending execution/results and add a server-side reconciliation path so ACKed work can safely recover after a process restart; keep uncertain operations fail-closed.
 2. Add integration tests for ACK timeouts, crash points, re-leases, duplicate delivery, clock skew, expired leases and partial failures.
 3. Wire the poller's tested lease-renewal loop into production startup only after a real executor exists; add timing and failure-injection integration tests.
 4. Add node credential rotation and revocation; retain mandatory mTLS certificate verification and per-node HMAC keys.
