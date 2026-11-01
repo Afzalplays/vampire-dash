@@ -1,6 +1,9 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"testing"
 	"time"
 )
@@ -51,4 +54,26 @@ func TestInvalidSignatureDoesNotConsumeReplayKey(t *testing.T) {
 	if _, duplicate, err := acceptSignedNodeJob(body, signJob(body), jobTestSecret, "node-a", path, now); err != nil || duplicate {
 		t.Fatalf("valid retry duplicate=%v err=%v", duplicate, err)
 	}
+}
+
+func TestOperationAndResultHashesMatchPanelCanonicalJSON(t *testing.T) {
+ job := signedNodeJob{
+  ID: "job_identifier_1234", NodeID: "node-test",
+  Nonce: "0123456789abcdef0123456789abcdef",
+  Action: "UPDATE_PROPERTIES",
+  Payload: []byte(`{"motd":"hello<&","maxPlayers":10}`),
+ }
+ identity, err := stableNodeJobIdentity(job)
+ if err != nil { t.Fatal(err) }
+ identityHash := sha256.Sum256(identity)
+ if got := hex.EncodeToString(identityHash[:]); got != "8d68e61ff0fe5b7c25542d4ac8c1fd552ae9451fa4dd2f67f81ce3506b8fe2bd" {
+  t.Fatalf("identity hash=%s", got)
+ }
+ terminal := map[string]any{"status":"SUCCEEDED", "result":map[string]any{"motd":"hello<&"}}
+ encoded, err := json.Marshal(terminal)
+ if err != nil { t.Fatal(err) }
+ resultHash := sha256.Sum256(encoded)
+ if got := hex.EncodeToString(resultHash[:]); got != "da776a42514be63318a00037a51914df73355730d11a54bbb9dbb55a5e2a352e" {
+  t.Fatalf("result hash=%s", got)
+ }
 }
