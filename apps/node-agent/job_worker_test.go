@@ -151,7 +151,9 @@ func TestPollerPersistsAcceptanceButNotExecutionWhenAckFails(t *testing.T) {
 func TestPollerBlocksNewClaimsWhileAnOperationIsUnresolved(t *testing.T) {
  panel, executor := &fakeJobPanel{}, &fakeJobExecutor{}
  p := newTestPoller(panel, executor, t.TempDir())
- unresolved := operationTestRecord(stageExecutionStarted)
+ unresolved := operationTestRecord(stageAccepted)
+ if err := advanceOperationJournal(p.journalPath+".operations.jsonl", unresolved); err != nil { t.Fatal(err) }
+ unresolved.Stage = stageExecutionStarted
  if err := advanceOperationJournal(p.journalPath+".operations.jsonl", unresolved); err != nil { t.Fatal(err) }
  if err := p.pollOnce(context.Background()); err == nil || !strings.Contains(err.Error(), "reconciliation is required") {
   t.Fatalf("expected unresolved-operation block, got %v", err)
