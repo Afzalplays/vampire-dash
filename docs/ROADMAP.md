@@ -24,8 +24,11 @@
 - [x] Bounded agent-job lease recovery with retry backoff and fail-closed handling after acknowledgement
 - [x] Agent-side HMAC envelope verification and fsync-backed persistent replay journal
 - [x] Go panel HTTPS client for claim/ack/renew/result with redirect blocking, bounded responses and optional private CA trust
-- [ ] Connect the panel client and replay journal to a crash-safe agent polling loop
+- [x] Testable Go polling state machine with durable replay-before-ACK, duplicate suppression and bounded result reporting (not wired into production startup)
+- [ ] Resolve replay identity across re-leases and acknowledgement timeouts; add durable pending-result recovery
+- [ ] Wire polling into agent startup after a production runtime adapter is available
 - [ ] Typed Docker runtime adapter with per-server isolation and strict cgroup resource limits
+- [ ] Active lease renewal during long-running execution
 - [ ] Operation execution, retries, cancellation and reconciliation
 - [ ] Server lifecycle state machine and reconciliation worker
 - [ ] Port allocation and firewall integration
