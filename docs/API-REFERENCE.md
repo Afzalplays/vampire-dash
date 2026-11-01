@@ -54,10 +54,10 @@ All admin endpoints require an authenticated ADMIN session. Capacity reservation
 Catalogue records default to disabled. These endpoints store metadata only; they do not download or install artifacts.
 
 ## Server operations
-- `POST /servers/:serverId/operations` — owner or permission-scoped subuser queues idempotent `START`, `STOP`, `RESTART`, or allowlisted `UPDATE_PROPERTIES`. Returns HTTP 202 with `execution: "NOT_DISPATCHED"`.
+- `POST /servers/:serverId/operations` — owner or permission-scoped subuser queues idempotent `START`, `STOP`, or `RESTART`. Returns HTTP 202 with `execution: "QUEUED_FOR_NODE_AGENT"`. `UPDATE_PROPERTIES` is rejected until the verified server-file adapter is implemented.
 - `GET /servers/:serverId/operations` — owner or subuser with `viewConsole` permission reads the latest 50 operations.
 
-Operation requests are persisted and audited, but are not executed yet. Only allowlisted server properties are accepted; arbitrary file paths, shell commands, URLs and container arguments are rejected. A node-agent dispatcher/worker must be deployed before these requests can change a running server.
+Operation requests are persisted and audited in the durable node-job outbox. The opt-in node worker claims signed jobs only when the node is enabled and online. START/STOP/RESTART execute only against a unique container carrying the exact immutable server ID label. The worker is disabled by default; trusted container provisioning, cgroup/disk quota enforcement and port firewall integration remain prerequisites before enabling customer traffic.
 
 ## Server subusers
 - `GET /servers/:serverId/subusers` — owner-only list of collaborators and permissions.
