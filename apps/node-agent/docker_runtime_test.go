@@ -9,6 +9,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"encoding/json"
+	"net"
+	"strconv"
 	"testing"
 )
 
@@ -136,6 +139,57 @@ func TestDockerRuntimeStartIsIdempotentWhenAlreadyRunning(t *testing.T) {
 	if result["state"] != "RUNNING" || calls != 3 {
 		t.Fatalf("start was not idempotent: result=%#v calls=%d", result, calls)
 	}
+}
+
+func TestDockerRuntimeProvisionsDigestPinnedContainerWithEnforcedLimitsAndPort(t *testing.T) {
+ listener, err := net.Listen("tcp", "127.0.0.1:0")
+ if err != nil { t.Fatal(err) }
+ port := listener.Addr().(*net.TCPAddr).Port
+ _ = listener.Close()
+ running := false
+ pullSeen, createSeen, startSeen := false, false, false
+ image := "itzg/minecraft-server@sha256:" + strings.Repeat("a",64)
+ payload := fmt.Sprintf(`{"name":"Survival","software":"PAPER","minecraftVersion":"1.21.1","dockerImage":%q,"javaMajor":21,"memoryMb":1024,"diskMb":2048,"cpuPercent":200,"port":%d}`,image,port)
+ runtime := dockerTestRuntime(func(request *http.Request) (*http.Response,error) {
+  switch {
+  case request.Method==http.MethodPost && request.URL.Path=="/"+dockerAPIVersion+"/images/create":
+   pullSeen=true
+   if request.URL.Query().Get("fromImage")!=image { t.Fatalf("wrong image pull: %s",request.URL.Query().Get("fromImage")) }
+   return dockerTestResponse(http.StatusOK,`{"status":"Downloaded"}\n`),nil
+  case request.Method==http.MethodPost && request.URL.Path=="/"+dockerAPIVersion+"/containers/create":
+   createSeen=true
+   var body map[string]any
+   if err:=json.NewDecoder(request.Body).Decode(&body);err!=nil { t.Fatal(err) }
+   if body["Image"]!=image { t.Fatalf("wrong image in create request: %#v",body["Image"]) }
+   labels:=body["Labels"].(map[string]any)
+   if labels[dockerServerLabel]!="server-provision-123" || labels[dockerNodeLabel]!="node-123" { t.Fatalf("ownership labels missing: %#v",labels) }
+   host:=body["HostConfig"].(map[string]any)
+   if host["Memory"]!=float64(1024*1024*1024) || host["NanoCpus"]!=float64(2_000_000_000) { t.Fatalf("resource limits missing: %#v",host) }
+   if host["StorageOpt"].(map[string]any)["size"]!="2048m" { t.Fatalf("disk quota missing: %#v",host["StorageOpt"]) }
+   bindings:=host["PortBindings"].(map[string]any)["25565/tcp"].([]any)
+   if bindings[0].(map[string]any)["HostPort"]!=strconv.Itoa(port) { t.Fatalf("port binding mismatch: %#v",bindings) }
+   return dockerTestResponse(http.StatusCreated,`{"Id":"`+dockerTestContainerID+`"}`),nil
+  case request.Method==http.MethodGet && request.URL.Path=="/"+dockerAPIVersion+"/containers/"+dockerTestContainerID+"/json":
+   state:="false";if running {state="true"}
+   return dockerTestResponse(http.StatusOK,fmt.Sprintf(`{"Config":{"Labels":{"%s":"server-provision-123","com.vampirenodes.managed":"true"}},"HostConfig":{"Memory":%d,"NanoCpus":%d,"StorageOpt":{"size":"2048m"},"PortBindings":{"25565/tcp":[{"HostIp":"0.0.0.0","HostPort":"%d"}]}},"State":{"Running":%s}}`,dockerServerLabel,int64(1024*1024*1024),int64(2_000_000_000),port,state)),nil
+  case request.Method==http.MethodPost && request.URL.Path=="/"+dockerAPIVersion+"/containers/"+dockerTestContainerID+"/start":
+   startSeen=true;running=true;return dockerTestResponse(http.StatusNoContent,""),nil
+  default: t.Fatalf("unexpected Docker request: %s %s",request.Method,request.URL.RequestURI());return nil,fmt.Errorf("unexpected request")
+  }
+ })
+ result,err:=runtime.Execute(context.Background(),signedNodeJob{ID:"job-provision-123456",NodeID:"node-123",ServerID:"server-provision-123",Action:"PROVISION_SERVER",Payload:[]byte(payload)})
+ if err!=nil {t.Fatal(err)}
+ if !pullSeen||!createSeen||!startSeen||!running {t.Fatalf("provisioning sequence incomplete: pull=%v create=%v start=%v running=%v",pullSeen,createSeen,startSeen,running)}
+ if result["state"]!="RUNNING"||result["port"]!=port||result["diskLimitMb"]!=int64(2048) {t.Fatalf("unexpected provisioning result: %#v",result)}
+}
+
+func TestDockerRuntimeRejectsUnpinnedImageBeforeDockerAccess(t *testing.T) {
+ calls:=0
+ runtime:=dockerTestRuntime(func(request *http.Request)(*http.Response,error){calls++;return dockerTestResponse(http.StatusOK,"{}"),nil})
+ payload:=[]byte(`{"name":"Survival","software":"PAPER","minecraftVersion":"1.21.1","dockerImage":"itzg/minecraft-server:latest","javaMajor":21,"memoryMb":1024,"diskMb":2048,"cpuPercent":100,"port":25565}`)
+ _,err:=runtime.Execute(context.Background(),signedNodeJob{NodeID:"node-123",ServerID:"server-123",Action:"PROVISION_SERVER",Payload:payload})
+ if err==nil||!strings.Contains(err.Error(),"pinned by SHA-256") {t.Fatalf("expected unpinned image rejection, got %v",err)}
+ if calls!=0 {t.Fatalf("unpinned image must not contact Docker, calls=%d",calls)}
 }
 
 func TestDockerRuntimeDoesNotStartAmbiguousServerIdentity(t *testing.T) {
