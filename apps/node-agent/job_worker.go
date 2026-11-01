@@ -8,6 +8,7 @@ import (
  "errors"
  "fmt"
  "log"
+ "os"
  "reflect"
  "strings"
  "time"
@@ -65,6 +66,7 @@ func (p *nodeJobPoller) run(ctx context.Context) error {
 // pollOnce persists replay protection before ACK. An identical redelivery only
 // retries ACK and is never executed again.
 func (p *nodeJobPoller) pollOnce(ctx context.Context) error {
+ if err := p.ensureNoUnresolvedOperations(); err != nil { return err }
  response, signedBody, err := p.panel.claim(ctx)
  if err != nil || response == nil { return err }
  job, duplicate, err := acceptSignedNodeJob(signedBody, response.Signature, p.signingKey, p.nodeID, p.journalPath, time.Now().UTC())
@@ -110,6 +112,19 @@ func (p *nodeJobPoller) pollOnce(ctx context.Context) error {
  record.Stage = stageResultConfirmed
  if err := advanceOperationJournal(operationPath, record); err != nil { return fmt.Errorf("persist confirmed operation result: %w", err) }
  if executeErr != nil { return fmt.Errorf("job %s execution failed: %w", job.ID, executeErr) }
+ return nil
+}
+
+
+func (p *nodeJobPoller) ensureNoUnresolvedOperations() error {
+ latest, err := latestOperationJournalRecords(p.journalPath + ".operations.jsonl")
+ if errors.Is(err, os.ErrNotExist) { return nil }
+ if err != nil { return fmt.Errorf("inspect operation recovery journal: %w", err) }
+ for jobID, record := range latest {
+  if record.Stage != stageResultConfirmed {
+   return fmt.Errorf("operation %s remains %s; reconciliation is required before claiming more work", jobID, record.Stage)
+  }
+ }
  return nil
 }
 
