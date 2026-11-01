@@ -62,3 +62,9 @@ func TestPollerReportsExecutionFailure(t *testing.T) {
  if err := p.pollOnce(context.Background()); err == nil { t.Fatal("expected execution failure") }
  if len(panel.results) != 1 || panel.results[0].Status != "FAILED" || panel.results[0].ErrorCode != "EXECUTION_FAILED" { t.Fatalf("unexpected failure report: %+v", panel.results) }
 }
+
+func TestBoundedErrorTrimsAndLimitsMessage(t *testing.T) {
+ if got := boundedError("  runtime unavailable  ", 20); got != "runtime unavailable" { t.Fatalf("unexpected trimmed error: %q", got) }
+ if got := boundedError("123456789", 5); got != "12345" { t.Fatalf("unexpected bounded error: %q", got) }
+ if got := boundedError("   ", 5); got != "" { t.Fatalf("expected empty trimmed error, got %q", got) }
+}
