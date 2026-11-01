@@ -23,8 +23,8 @@ describe("node-agent reconciliation hashes", () => {
       id: "job_identifier_1234",
       nodeId: "node-test",
       nonce: "0123456789abcdef0123456789abcdef",
-      serverId: "server-test",
       operation: {
+        serverId: "server-test",
         type: "UPDATE_PROPERTIES",
         payload: { motd: "hello<&", maxPlayers: 10 },
       },
