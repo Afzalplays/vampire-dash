@@ -202,10 +202,10 @@ func newHandler(c config) http.Handler {
 func startJobWorker(ctx context.Context, c config) error {
  if !c.EnableJobExecution { return nil }
  if err := os.MkdirAll(c.DataDirectory, 0700); err != nil { return fmt.Errorf("create agent data directory: %w", err) }
- if err := os.Chmod(c.DataDirectory, 0700); err != nil { return fmt.Errorf("secure agent data directory: %w", err) }
  info, err := os.Lstat(c.DataDirectory)
  if err != nil { return fmt.Errorf("inspect agent data directory: %w", err) }
  if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 { return errors.New("AGENT_DATA_DIR must be a real directory, not a symlink") }
+ if err := os.Chmod(c.DataDirectory, 0700); err != nil { return fmt.Errorf("secure agent data directory: %w", err) }
  docker, err := newDockerRuntime(c.DockerSocket)
  if err != nil { return fmt.Errorf("configure Docker runtime: %w", err) }
  panel, err := newPanelClient(c.PanelAPIURL, c.AgentToken)
