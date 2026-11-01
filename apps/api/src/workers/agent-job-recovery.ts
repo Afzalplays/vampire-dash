@@ -3,12 +3,7 @@ import { prisma } from "../lib/prisma.js";
 const INTERVAL_MS = 15_000;
 const LOCK_NAMESPACE = 731_205;
 const LOCK_ID = 1;
-const MAX_BACKOFF_MS = 15 * 60_000;
-
-export function calculateAgentJobRetryDelayMs(attempts: number): number {
-  if (!Number.isInteger(attempts) || attempts < 1) throw new Error('attempts must be a positive integer');
-  return Math.min(30_000 * (2 ** Math.max(0, attempts - 1)), MAX_BACKOFF_MS);
-}
+import { calculateAgentJobRetryDelayMs } from "./agent-job-retry.js";
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**

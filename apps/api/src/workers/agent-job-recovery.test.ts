@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { calculateAgentJobRetryDelayMs } from "./agent-job-recovery.js";
+import { calculateAgentJobRetryDelayMs } from "./agent-job-retry.js";
 
 describe("agent job retry backoff", () => {
   it("doubles from 30 seconds", () => {
