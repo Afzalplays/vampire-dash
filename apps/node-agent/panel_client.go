@@ -109,6 +109,44 @@ func (p *panelClient) renew(ctx context.Context, jobID, leaseToken string) (time
  return response.LeaseExpiresAt, nil
 }
 
+
+type reconciliationResponse struct {
+ OK bool `json:"ok"`
+ Status string `json:"status"`
+}
+
+func (p *panelClient) reconcile(ctx context.Context, jobID, identityHash, state, resultHash string, terminalResult map[string]any) (string, error) {
+ if !jobIDPattern.MatchString(jobID) || !replayBodyHashPattern.MatchString(identityHash) {
+  return "", errors.New("invalid operation reconciliation identity")
+ }
+ if state != string(stageExecutionStarted) && state != string(stageResultPending) {
+  return "", errors.New("invalid operation reconciliation state")
+ }
+ payload := map[string]any{"identityHash": identityHash, "state": state}
+ if state == string(stageResultPending) {
+  if !replayBodyHashPattern.MatchString(resultHash) || terminalResult == nil {
+   return "", errors.New("pending result reconciliation requires a valid result hash and payload")
+  }
+  payload["resultHash"] = resultHash
+  payload["terminalResult"] = terminalResult
+ } else if resultHash != "" || terminalResult != nil {
+  return "", errors.New("execution-started reconciliation cannot include a result")
+ }
+ body, status, err := p.postJSON(ctx, "/api/agent/jobs/"+url.PathEscape(jobID)+"/reconcile", payload)
+ if err != nil { return "", err }
+ if status != http.StatusOK { return "", fmt.Errorf("panel reconciliation returned HTTP %d", status) }
+ var response reconciliationResponse
+ if err := json.Unmarshal(body, &response); err != nil || !response.OK {
+  return "", errors.New("panel returned an invalid reconciliation response")
+ }
+ switch response.Status {
+ case "RESULT_COMMITTED", "RESULT_ACCEPTED", "IN_PROGRESS", "UNCERTAIN":
+  return response.Status, nil
+ default:
+  return "", errors.New("panel returned an unsupported reconciliation status")
+ }
+}
+
 func (p *panelClient) reportResult(ctx context.Context, jobID string, result jobResultRequest) error {
  if !jobIDPattern.MatchString(jobID) || len(result.LeaseToken) != 43 || (result.Status != "SUCCEEDED" && result.Status != "FAILED") {
   return errors.New("invalid job result parameters")
