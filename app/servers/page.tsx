@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 type Server = {
   id: string; name: string; software: string; version: string; memoryMb: number;
   diskMb: number; cpuPercent: number; status: string; expiresAt: string | null; allocation: { port: number; protocol: string } | null;
-  node: { name: string; location: string; healthStatus: string; lastSeenAt: string | null } | null;
+  node: { name: string; location: string; minecraftAddress: string | null; healthStatus: string; lastSeenAt: string | null } | null;
   access: { role: string; permissions: Record<string, boolean> };
 };
 type Release = { software: string; minecraftVersion: string; softwareVersion: string; recommended: boolean };
