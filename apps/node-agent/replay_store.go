@@ -37,6 +37,8 @@ func consumeJobReplayKey(journalPath, jobID, nonce, bodyHash string) (bool, erro
  defer syscall.Flock(int(file.Fd()), syscall.LOCK_UN)
  info, err := file.Stat()
  if err != nil { return false, fmt.Errorf("stat replay journal: %w", err) }
+ if !info.Mode().IsRegular() { return false, errors.New("replay journal must be a regular file") }
+ if err := file.Chmod(0600); err != nil { return false, fmt.Errorf("secure replay journal permissions: %w", err) }
  if info.Size() > maxReplayJournalBytes { return false, errors.New("replay journal is full; refusing new jobs") }
  if _, err := file.Seek(0, 0); err != nil { return false, fmt.Errorf("rewind replay journal: %w", err) }
  scanner := bufio.NewScanner(file)
