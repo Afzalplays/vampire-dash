@@ -171,7 +171,7 @@ func TestDockerRuntimeProvisionsDigestPinnedContainerWithEnforcedLimitsAndPort(t
    return dockerTestResponse(http.StatusCreated,`{"Id":"`+dockerTestContainerID+`"}`),nil
   case request.Method==http.MethodGet && request.URL.Path=="/"+dockerAPIVersion+"/containers/"+dockerTestContainerID+"/json":
    state:="false";if running {state="true"}
-   return dockerTestResponse(http.StatusOK,fmt.Sprintf(`{"Config":{"Labels":{"%s":"server-provision-123","com.vampirenodes.managed":"true"}},"HostConfig":{"Memory":%d,"NanoCpus":%d,"StorageOpt":{"size":"2048m"},"PortBindings":{"25565/tcp":[{"HostIp":"0.0.0.0","HostPort":"%d"}]}},"State":{"Running":%s}}`,dockerServerLabel,int64(1024*1024*1024),int64(2_000_000_000),port,state)),nil
+   return dockerTestResponse(http.StatusOK,fmt.Sprintf(`{"Config":{"Labels":{"%s":"server-provision-123","%s":"node-123","com.vampirenodes.managed":"true"}},"HostConfig":{"Memory":%d,"NanoCpus":%d,"StorageOpt":{"size":"2048m"},"PortBindings":{"25565/tcp":[{"HostIp":"0.0.0.0","HostPort":"%d"}]}},"State":{"Running":%s}}`,dockerServerLabel,dockerNodeLabel,int64(1024*1024*1024),int64(2_000_000_000),port,state)),nil
   case request.Method==http.MethodPost && request.URL.Path=="/"+dockerAPIVersion+"/containers/"+dockerTestContainerID+"/start":
    startSeen=true;running=true;return dockerTestResponse(http.StatusNoContent,""),nil
   default: t.Fatalf("unexpected Docker request: %s %s",request.Method,request.URL.RequestURI());return nil,fmt.Errorf("unexpected request")
