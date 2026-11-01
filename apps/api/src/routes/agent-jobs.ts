@@ -5,6 +5,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { env } from "../env.js";
 import { decryptNodeCredential } from "../lib/node-credentials.js";
+import { nodeAgentTerminalResultHash, nodeOperationIdentityHash } from "../lib/agent-job-identity.js";
 
 
 const powerPayloadSchema = z.object({}).strict();
@@ -31,31 +32,6 @@ const stableJson = (value: unknown): string => {
   return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableJson(record[key])}`).join(",")}}`;
 };
 
-
-const goCompatibleJson = (value: unknown): string =>
-  stableJson(value)
-    .replace(/&/g, "\\u0026")
-    .replace(/</g, "\\u003c")
-    .replace(/>/g, "\\u003e")
-    .replace(/\u2028/g, "\\u2028")
-    .replace(/\u2029/g, "\\u2029");
-
-const goJSONString = (value: string): string =>
-  JSON.stringify(value)
-    .replace(/&/g, "\\u0026")
-    .replace(/</g, "\\u003c")
-    .replace(/>/g, "\\u003e")
-    .replace(/\u2028/g, "\\u2028")
-    .replace(/\u2029/g, "\\u2029");
-
-function nodeOperationIdentityHash(job: {
-  id: string; nodeId: string; nonce: string;
-  operation: { type: string; payload: unknown };
-}): string {
-  const payload = goCompatibleJson(job.operation.payload);
-  const identity = `{"id":${goJSONString(job.id)},"nodeId":${goJSONString(job.nodeId)},"nonce":${goJSONString(job.nonce)},"action":${goJSONString(job.operation.type)},"payload":${payload}}`;
-  return createHash("sha256").update(identity, "utf8").digest("hex");
-}
 
 const terminalResultSchema = z.object({
   status: z.enum(["SUCCEEDED", "FAILED"]),
@@ -233,7 +209,7 @@ export const agentJobRoutes: FastifyPluginAsync = async (app) => {
       return reply.code(400).send({ error: "Terminal result is too large" });
     }
     if (body.data.terminalResult) {
-      const computed = createHash("sha256").update(goCompatibleJson(body.data.terminalResult), "utf8").digest("hex");
+      const computed = nodeAgentTerminalResultHash(body.data.terminalResult);
       if (computed !== body.data.resultHash) return reply.code(400).send({ error: "Terminal result hash does not match its content" });
     }
 
