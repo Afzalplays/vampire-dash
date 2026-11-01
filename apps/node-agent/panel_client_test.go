@@ -52,6 +52,8 @@ func TestPanelClientClaimRejectsOversizedBody(t *testing.T) {
  if _, _, err := client.claim(context.Background()); err == nil { t.Fatal("expected oversized response rejection") }
 }
 
+const testLeaseToken = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+
 func TestPanelClientLeaseLifecycleRequests(t *testing.T) {
  expires := time.Now().UTC().Add(time.Minute).Truncate(time.Second)
  var seen []string

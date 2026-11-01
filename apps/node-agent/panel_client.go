@@ -83,7 +83,7 @@ func (p *panelClient) claim(ctx context.Context) (*claimResponse, []byte, error)
 }
 
 func (p *panelClient) acknowledge(ctx context.Context, jobID, leaseToken string) error {
- if !validJobID(jobID) || len(leaseToken) != 43 { return errors.New("invalid job acknowledgement parameters") }
+ if !jobIDPattern.MatchString(jobID) || len(leaseToken) != 43 { return errors.New("invalid job acknowledgement parameters") }
  _, status, err := p.postJSON(ctx, "/api/agent/jobs/"+url.PathEscape(jobID)+"/ack", leaseRequest{LeaseToken: leaseToken})
  if err != nil { return err }
  if status != http.StatusOK { return fmt.Errorf("panel acknowledgement returned HTTP %d", status) }
@@ -91,7 +91,7 @@ func (p *panelClient) acknowledge(ctx context.Context, jobID, leaseToken string)
 }
 
 func (p *panelClient) renew(ctx context.Context, jobID, leaseToken string) (time.Time, error) {
- if !validJobID(jobID) || len(leaseToken) != 43 { return time.Time{}, errors.New("invalid lease renewal parameters") }
+ if !jobIDPattern.MatchString(jobID) || len(leaseToken) != 43 { return time.Time{}, errors.New("invalid lease renewal parameters") }
  body, status, err := p.postJSON(ctx, "/api/agent/jobs/"+url.PathEscape(jobID)+"/renew", leaseRequest{LeaseToken: leaseToken})
  if err != nil { return time.Time{}, err }
  if status != http.StatusOK { return time.Time{}, fmt.Errorf("panel lease renewal returned HTTP %d", status) }
@@ -103,7 +103,7 @@ func (p *panelClient) renew(ctx context.Context, jobID, leaseToken string) (time
 }
 
 func (p *panelClient) reportResult(ctx context.Context, jobID string, result jobResultRequest) error {
- if !validJobID(jobID) || len(result.LeaseToken) != 43 || (result.Status != "SUCCEEDED" && result.Status != "FAILED") {
+ if !jobIDPattern.MatchString(jobID) || len(result.LeaseToken) != 43 || (result.Status != "SUCCEEDED" && result.Status != "FAILED") {
   return errors.New("invalid job result parameters")
  }
  if result.Status == "FAILED" && result.ErrorCode == "" { return errors.New("failed job result requires an error code") }
