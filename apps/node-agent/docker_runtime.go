@@ -25,34 +25,7 @@ const (
 	maxDockerResponseBytes = 1 << 20
 )
 
-var dockerContainerIDPattern = regexp.MustCompile(`^[a-f0-9]{64}package main
-
-import (
-	"bufio"
-	"bytes"
-	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"io"
-	"net"
-	"net/http"
-	"net/url"
-	"os"
-	"regexp"
-	"strconv"
-	"strings"
-	"time"
-)
-
-const (
-	dockerAPIVersion = "v1.45"
-	dockerServerLabel = "com.vampirenodes.server_id"
-	dockerNodeLabel = "com.vampirenodes.node_id"
-	maxDockerResponseBytes = 1 << 20
-)
-
-)
+var dockerContainerIDPattern = regexp.MustCompile("^[a-f0-9]{64}$")
 var serverIDPattern = regexp.MustCompile("^[A-Za-z0-9_-]{1,128}$")
 
 type dockerRuntime struct {
