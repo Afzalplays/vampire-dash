@@ -37,3 +37,22 @@ func TestDecodeClaimResponseRejectsInvalidLeaseAndExpiry(t *testing.T) {
  bad=strings.Replace(string(claimFixture(now)), now.Add(time.Minute).Format(time.RFC3339Nano), now.Add(-time.Minute).Format(time.RFC3339Nano),1)
  if _,_,err:=decodeClaimResponse([]byte(bad),now);err==nil{t.Fatal("expected expiry rejection")}
 }
+
+func TestDecodeClaimResponseRejectsMalformedLeaseToken(t *testing.T) {
+ now:=time.Now().UTC()
+ var response map[string]any
+ if err:=json.Unmarshal(claimFixture(now),&response);err!=nil{t.Fatal(err)}
+ response["leaseToken"]="not-a-valid-lease"
+ raw,err:=json.Marshal(response);if err!=nil{t.Fatal(err)}
+ if _,_,err:=decodeClaimResponse(raw,now);err==nil{t.Fatal("expected invalid lease token rejection")}
+}
+
+func TestDecodeClaimResponseRejectsUnknownFieldsAndTrailingJSON(t *testing.T) {
+ now:=time.Now().UTC()
+ var response map[string]any
+ if err:=json.Unmarshal(claimFixture(now),&response);err!=nil{t.Fatal(err)}
+ response["unexpected"]="value"
+ raw,err:=json.Marshal(response);if err!=nil{t.Fatal(err)}
+ if _,_,err:=decodeClaimResponse(raw,now);err==nil{t.Fatal("expected unknown field rejection")}
+ if _,_,err:=decodeClaimResponse(append(claimFixture(now),[]byte("{}")...),now);err==nil{t.Fatal("expected trailing JSON rejection")}
+}
