@@ -199,7 +199,7 @@ func latestOperationJournalRecords(path string) (map[string]operationJournalReco
 	if path == "" || !filepath.IsAbs(path) {
 		return nil, errors.New("operation journal path must be absolute")
 	}
-	file, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
+	file, err := os.OpenFile(path, os.O_RDWR|syscall.O_NOFOLLOW, 0600)
 	if err != nil {
 		return nil, fmt.Errorf("open operation journal for recovery: %w", err)
 	}
@@ -215,6 +215,7 @@ func latestOperationJournalRecords(path string) (map[string]operationJournalReco
 	if !info.Mode().IsRegular() || info.Size() > maxOperationJournalBytes {
 		return nil, errors.New("operation journal is not a valid regular file")
 	}
+	if err := file.Chmod(0600); err != nil { return nil, fmt.Errorf("secure operation journal permissions: %w", err) }
 	latest := make(map[string]operationJournalRecord)
 	if _, err := file.Seek(0, 0); err != nil {
 		return nil, fmt.Errorf("rewind operation journal for recovery: %w", err)
