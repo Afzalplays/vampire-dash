@@ -12,7 +12,7 @@ import (
 const jobTestSecret = "01234567890123456789012345678901"
 
 func signedJobBody(now time.Time, action, payload string) []byte {
-	return []byte(fmt.Sprintf(`{"id":"job_identifier_1234","nodeId":"node-a","nonce":"0123456789abcdef0123456789abcdef","issuedAt":%q,"expiresAt":%q,"action":%q,"payload":%s}`,
+	return []byte(fmt.Sprintf(`{"id":"job_identifier_1234","nodeId":"node-a","nonce":"0123456789abcdef0123456789abcdef","serverId":"server-test","issuedAt":%q,"expiresAt":%q,"action":%q,"payload":%s}`,
 		now.UTC().Format(time.RFC3339), now.Add(time.Minute).UTC().Format(time.RFC3339), action, payload))
 }
 
