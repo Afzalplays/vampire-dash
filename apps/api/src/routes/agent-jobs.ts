@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { env } from "../env.js";
 import { decryptNodeCredential } from "../lib/node-credentials.js";
@@ -110,8 +111,8 @@ export const agentJobRoutes: FastifyPluginAsync = async (app) => {
       await tx.minecraftServerOperation.updateMany({
         where: { id: job.operationId, status: "RUNNING" },
         data: body.data.status === "SUCCEEDED"
-          ? { status: "SUCCEEDED", result: body.data.result ?? {}, finishedAt: now, errorCode: null, errorMessage: null }
-          : { status: "FAILED", result: body.data.result ?? {}, errorCode: body.data.errorCode, errorMessage: body.data.errorMessage ?? "Node agent reported operation failure", finishedAt: now },
+          ? { status: "SUCCEEDED", result: (body.data.result ?? {}) as Prisma.InputJsonValue, finishedAt: now, errorCode: null, errorMessage: null }
+          : { status: "FAILED", result: (body.data.result ?? {}) as Prisma.InputJsonValue, errorCode: body.data.errorCode, errorMessage: body.data.errorMessage ?? "Node agent reported operation failure", finishedAt: now },
       });
       return body.data.status;
     }, { maxWait: 10000, timeout: 15000 });
