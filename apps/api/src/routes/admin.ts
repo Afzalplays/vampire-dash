@@ -342,6 +342,11 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     const token = randomBytes(32).toString("base64url");
     const encrypted = encryptNodeCredential(token);
     const node = await prisma.$transaction(async (tx) => {
+      const acknowledged = await tx.nodeAgentJob.count({
+        where: { nodeId: existing.id, status: "ACKNOWLEDGED" },
+      });
+      if (acknowledged > 0) return null;
+
       const updated = await tx.minecraftNode.update({
         where: { id: existing.id },
         data: {
@@ -365,6 +370,9 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
         },
       });
       return updated;
+    });
+    if (!node) return reply.code(409).send({
+      error: "Credential rotation is blocked while acknowledged jobs may still be executing; wait for them to be reconciled first",
     });
 
     return reply.code(200).send({
