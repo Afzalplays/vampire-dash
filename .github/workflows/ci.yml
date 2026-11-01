@@ -18,6 +18,7 @@ jobs:
       - run: npm install
       - run: npm run db:generate
       - run: npm run build:api
+      - run: npm run test:agent-jobs
       - run: npm run build
   node-agent:
     runs-on: ubuntu-latest
