@@ -1,0 +1,36 @@
+[Unit]
+Description=Vampire Dash Minecraft Node Agent
+Documentation=https://github.com/Afzalplays/vampire-dash
+Wants=network-online.target
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+EnvironmentFile=/etc/vampire-node-agent/agent.env
+ExecStart=/usr/local/bin/vampire-node-agent
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=30s
+LimitNOFILE=65536
+UMask=0077
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=/var/lib/vampire-dash/agent
+ReadWritePaths=/run/docker.sock
+ReadOnlyPaths=/etc/vampire-node-agent/pki
+
+[Install]
+WantedBy=multi-user.target
