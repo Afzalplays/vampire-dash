@@ -229,6 +229,7 @@ model MinecraftNode {
   name           String
   location       String
   endpoint       String
+  minecraftAddress String?
   tokenHash      String           @unique
   tokenCiphertext String?
   tokenNonce     String?
