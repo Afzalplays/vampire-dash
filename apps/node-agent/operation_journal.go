@@ -136,13 +136,26 @@ func advanceOperationJournal(path string, next operationJournalRecord) error {
 		if record.NodeID != next.NodeID || record.Nonce != next.Nonce || record.IdentityHash != next.IdentityHash {
 			return errors.New("operation journal identity conflict")
 		}
-		if current == nil || operationStageNumber(record.Stage) > operationStageNumber(current.Stage) {
+		if current == nil {
+			if record.Stage != stageAccepted {
+				return errors.New("operation journal history is incomplete")
+			}
 			copy := record
 			current = &copy
-		} else if operationStageNumber(record.Stage) == operationStageNumber(current.Stage) &&
-			(record.ResultHash != current.ResultHash || string(record.Result) != string(current.Result)) {
-			return errors.New("operation journal contains contradictory state")
+			continue
 		}
+		oldStage, newStage := operationStageNumber(current.Stage), operationStageNumber(record.Stage)
+		if newStage == oldStage {
+			if record.ResultHash != current.ResultHash || string(record.Result) != string(current.Result) {
+				return errors.New("operation journal contains contradictory state")
+			}
+			continue
+		}
+		if newStage != oldStage+1 {
+			return errors.New("operation journal transition history is invalid")
+		}
+		copy := record
+		current = &copy
 	}
 	if err := scanner.Err(); err != nil {
 		return fmt.Errorf("read operation journal: %w", err)
