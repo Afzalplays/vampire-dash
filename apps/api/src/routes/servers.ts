@@ -91,11 +91,12 @@ export const serverRoutes: FastifyPluginAsync = async (app) => {
             expiresAt: entitlement.expiresAt,
           }, select: serverSelect });
           await tx.nodePortAllocation.create({ data: { nodeId: node.id, serverId: server.id, port: allocatedPort, protocol: "TCP" } });
+          const serverWithAllocation = await tx.minecraftServer.findUniqueOrThrow({ where: { id: server.id }, select: serverSelect });
           await tx.auditLog.create({ data: {
             actorUserId: user.id, action: "SERVER_CREATED", targetId: server.id,
             details: `Created server ${server.name} on node ${node.name} using entitlement ${entitlement.id}; reserved TCP port ${allocatedPort}; provisioning is pending`,
           } });
-          return server;
+          return serverWithAllocation;
         }
         throw new Error("NO_NODE_CAPACITY");
       }, { isolationLevel: "Serializable", maxWait: 10000, timeout: 20000 });
