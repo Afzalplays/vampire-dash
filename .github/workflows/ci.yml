@@ -7,6 +7,20 @@ on:
 jobs:
   checks:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: vampire
+          POSTGRES_PASSWORD: ci-password
+          POSTGRES_DB: vampiredash
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U vampire -d vampiredash"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
       DATABASE_URL: postgresql://vampire:ci-password@localhost:5432/vampiredash
       SESSION_SECRET: ci-only-session-secret-at-least-32-characters
@@ -17,6 +31,7 @@ jobs:
           node-version: 22
       - run: npm install
       - run: npm run db:generate
+      - run: npx prisma db push --schema apps/api/prisma/schema.prisma --skip-generate
       - run: npm run build:api
       - run: npm run test:agent-jobs
       - run: npm run build
