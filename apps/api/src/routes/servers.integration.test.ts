@@ -67,7 +67,7 @@ describe("server creation resource and port allocation", () => {
       assert.equal(second.json().server.allocation.port, 25566);
       const third = await app.inject({ method: "POST", url: "/api/servers", headers, payload: { entitlementId: entitlement.id, name: "CI Server Three", software: "PAPER", version: "1.21.1" } });
       assert.equal(third.statusCode, 409, third.body);
-      assert.match(third.json().error, /CPU or TCP port capacity/i);
+      assert.match(third.json().error, /public address or TCP port capacity/i);
       const allocations = await prisma.nodePortAllocation.findMany({ where: { nodeId: node.id }, orderBy: { port: "asc" } });
       assert.deepEqual(allocations.map((allocation) => allocation.port), [25565, 25566]);
     } finally {
