@@ -46,43 +46,8 @@ type provisionJobPayload struct {
  Port int `json:"port"`
 }
 
-var dockerImagePattern = regexp.MustCompile(`^[A-Za-z0-9._/:@-]{3,255}package main
+var dockerImagePattern = regexp.MustCompile(`^(?:docker.io/)?itzg/minecraft-server@sha256:[a-f0-9]{64}$`)
 
-import (
-	"bytes"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"io"
-	"regexp"
-	"strings"
-	"time"
-)
-
-const maxJobBodyBytes = 16 * 1024
-const maxJobClockSkew = 30 * time.Second
-const maxJobLifetime = 2 * time.Minute
-
-var jobIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{16,128}$`)
-var noncePattern = regexp.MustCompile(`^[A-Fa-f0-9]{32,128}$`)
-
-type signedNodeJob struct {
-	ID        string          `json:"id"`
-	NodeID    string          `json:"nodeId"`
-	Nonce     string          `json:"nonce"`
-	ServerID  string          `json:"serverId"`
-	IssuedAt  time.Time       `json:"issuedAt"`
-	ExpiresAt time.Time       `json:"expiresAt"`
-	Action    string          `json:"action"`
-	Payload   json.RawMessage `json:"payload"`
-}
-
-type powerJobPayload struct{}
-
-)
 type propertyJobPayload struct {
 	MOTD               *string `json:"motd,omitempty"`
 	Difficulty         *string `json:"difficulty,omitempty"`
