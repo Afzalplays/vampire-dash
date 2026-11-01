@@ -1,0 +1,84 @@
+package main
+
+import (
+ "context"
+ "errors"
+ "fmt"
+ "strings"
+ "time"
+)
+
+type jobPanelAPI interface {
+ claim(context.Context) (*claimResponse, []byte, error)
+ acknowledge(context.Context, string, string) error
+ reportResult(context.Context, string, jobResultRequest) error
+}
+
+// nodeJobExecutor must map allowlisted actions to fixed runtime operations.
+// Implementations must never execute user-controlled shell commands.
+type nodeJobExecutor interface {
+ Execute(context.Context, signedNodeJob) (map[string]any, error)
+}
+
+type nodeJobPoller struct {
+ panel jobPanelAPI
+ executor nodeJobExecutor
+ nodeID string
+ signingKey string
+ journalPath string
+ interval time.Duration
+}
+
+func (p *nodeJobPoller) validate() error {
+ if p.panel == nil || p.executor == nil { return errors.New("job poller requires a panel client and an execution adapter") }
+ if p.nodeID == "" || len(p.signingKey) < 32 { return errors.New("job poller requires a node ID and a 256-bit signing key") }
+ if p.journalPath == "" { return errors.New("job poller requires a persistent replay journal path") }
+ if p.interval < time.Second || p.interval > time.Minute { return errors.New("job poll interval must be between 1 second and 1 minute") }
+ return nil
+}
+
+// run polls sequentially and refuses to claim work without a concrete executor.
+func (p *nodeJobPoller) run(ctx context.Context) error {
+ if err := p.validate(); err != nil { return err }
+ ticker := time.NewTicker(p.interval)
+ defer ticker.Stop()
+ for {
+  if err := p.pollOnce(ctx); err != nil && !errors.Is(err, context.Canceled) {
+   // Transient errors are retried on the next tick; panel lease recovery
+   // handles a claim whose lease expires while the agent is unavailable.
+  }
+  select {
+  case <-ctx.Done(): return ctx.Err()
+  case <-ticker.C:
+  }
+ }
+}
+
+// pollOnce persists replay protection before ACK. An identical redelivery only
+// retries ACK and is never executed again.
+func (p *nodeJobPoller) pollOnce(ctx context.Context) error {
+ response, signedBody, err := p.panel.claim(ctx)
+ if err != nil || response == nil { return err }
+ job, duplicate, err := acceptSignedNodeJob(signedBody, response.Signature, p.signingKey, p.nodeID, p.journalPath, time.Now().UTC())
+ if err != nil { return fmt.Errorf("reject signed node job: %w", err) }
+ if duplicate { return p.panel.acknowledge(ctx, job.ID, response.LeaseToken) }
+ // If the process crashes after ACK but before execution, lease recovery
+ // fails the operation closed instead of replaying a potentially unsafe side effect.
+ if err := p.panel.acknowledge(ctx, job.ID, response.LeaseToken); err != nil { return fmt.Errorf("acknowledge accepted job: %w", err) }
+ result, executeErr := p.executor.Execute(ctx, job)
+ report := jobResultRequest{LeaseToken: response.LeaseToken, Status: "SUCCEEDED", Result: result}
+ if executeErr != nil {
+  report.Status = "FAILED"
+  report.ErrorCode = "EXECUTION_FAILED"
+  report.ErrorMessage = boundedError(executeErr.Error(), 500)
+ }
+ if err := p.panel.reportResult(ctx, job.ID, report); err != nil { return fmt.Errorf("report job result: %w", err) }
+ if executeErr != nil { return fmt.Errorf("job %s execution failed: %w", job.ID, executeErr) }
+ return nil
+}
+
+func boundedError(value string, max int) string {
+ value = strings.TrimSpace(value)
+ if len(value) <= max { return value }
+ return value[:max]
+}
