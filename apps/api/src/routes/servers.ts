@@ -26,7 +26,7 @@ export const serverRoutes: FastifyPluginAsync = async (app) => {
     const parsed = z.object({
       entitlementId: z.string().min(1).max(128),
       name: z.string().trim().min(3).max(32).regex(/^[A-Za-z0-9][A-Za-z0-9 _.-]*$/),
-      software: z.enum(["VANILLA", "PAPER", "PURPUR", "FABRIC", "FORGE", "NEOFORGE", "VELOCITY", "BUNGEECORD", "BEDROCK"]),
+      software: z.enum(["VANILLA", "PAPER", "PURPUR", "FABRIC", "FORGE", "NEOFORGE", "VELOCITY", "BUNGEECORD"]),
       version: z.string().trim().min(1).max(32),
     }).strict().safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "Invalid server creation request", details: parsed.error.flatten() });
