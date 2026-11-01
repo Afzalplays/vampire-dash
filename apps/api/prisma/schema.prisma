@@ -78,6 +78,14 @@ enum ServerOperationStatus {
   CANCELLED
 }
 
+enum AgentJobStatus {
+  PENDING
+  LEASED
+  ACKNOWLEDGED
+  FAILED
+  DEAD
+}
+
 model User {
   id                  String        @id @default(cuid())
   email               String        @unique
@@ -241,6 +249,7 @@ model MinecraftNode {
   createdAt           DateTime         @default(now())
   servers             MinecraftServer[]
   reservations        NodeCapacityReservation[]
+  agentJobs           NodeAgentJob[]
 }
 model NodeCapacityReservation {
   id             String @id @default(cuid())
@@ -270,6 +279,7 @@ model MinecraftServer {
   owner      User         @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   node       MinecraftNode? @relation(fields: [nodeId], references: [id], onDelete: SetNull)
   operations MinecraftServerOperation[]
+  agentJobs  NodeAgentJob[]
   subusers   MinecraftServerSubuser[]
   @@index([ownerId, createdAt])
 }
@@ -379,7 +389,30 @@ model MinecraftServerOperation {
   actor          User @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
   @@index([serverId, createdAt])
   @@index([status, createdAt])
+  agentJob       NodeAgentJob?
 }
+
+model NodeAgentJob {
+  id             String @id @default(cuid())
+  operationId    String @unique
+  nodeId         String
+  status         AgentJobStatus @default(PENDING)
+  nonce          String @unique
+  attempts       Int @default(0)
+  maxAttempts    Int @default(5)
+  availableAt    DateTime @default(now())
+  leaseTokenHash String?
+  leaseExpiresAt DateTime?
+  lastErrorCode  String?
+  lastError      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  operation      MinecraftServerOperation @relation(fields: [operationId], references: [id], onDelete: Cascade)
+  node           MinecraftNode @relation(fields: [nodeId], references: [id], onDelete: Restrict)
+  @@index([nodeId, status, availableAt])
+  @@index([status, leaseExpiresAt])
+}
+
 model AuditLog {
   id          String   @id @default(cuid())
   actorUserId String?
