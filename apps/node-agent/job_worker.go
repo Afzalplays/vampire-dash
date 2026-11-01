@@ -94,12 +94,10 @@ func (p *nodeJobPoller) pollOnce(ctx context.Context) error {
   report.ErrorMessage = boundedError(executeErr.Error(), 500)
  }
  // Persist the exact terminal payload without the ephemeral lease credential.
- terminal := struct {
-  Status string `json:"status"`
-  Result map[string]any `json:"result,omitempty"`
-  ErrorCode string `json:"errorCode,omitempty"`
-  ErrorMessage string `json:"errorMessage,omitempty"`
- }{report.Status, report.Result, report.ErrorCode, report.ErrorMessage}
+ terminal := map[string]any{"status": report.Status}
+ if report.Result != nil { terminal["result"] = report.Result }
+ if report.ErrorCode != "" { terminal["errorCode"] = report.ErrorCode }
+ if report.ErrorMessage != "" { terminal["errorMessage"] = report.ErrorMessage }
  resultBytes, err := json.Marshal(terminal)
  if err != nil { return fmt.Errorf("encode terminal operation result: %w", err) }
  resultSum := sha256.Sum256(resultBytes)
