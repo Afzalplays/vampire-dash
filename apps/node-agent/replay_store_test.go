@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
- "os"
 	"sync"
 	"testing"
 )
