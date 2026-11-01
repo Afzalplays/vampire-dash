@@ -42,7 +42,7 @@
 - [ ] Mod installer for Fabric/Forge/NeoForge with dependency checks
 - [ ] Modpack installer with pinned manifests and rollback
 - [ ] Server utilities: properties, EULA, schedules, backups, logs, ports and diagnostics
-- [ ] Customer-facing operation history and progress UI
+- [x] Customer-facing queued operation history and controls (execution pending secure worker)
 
 ## Billing and security
 - [ ] FamGateway webhook signature verification and payment reconciliation

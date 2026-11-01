@@ -66,3 +66,8 @@ Operation requests are persisted and audited, but are not executed yet. Only all
 - `DELETE /servers/:serverId/subusers/:subuserId` — owner-only revoke access.
 
 Subusers cannot manage other subusers or change ownership. Power permission authorizes queued start/stop/restart requests; settings permission authorizes allowlisted property updates; console permission authorizes operation history viewing. File and backup permissions are stored for their future APIs. Free server owners can use subusers; these endpoints do not require a paid entitlement. All changes are audited.
+
+
+## Customer server detail UI
+- `/servers` — customer server list and entitlement-backed server creation form.
+- `/servers/:serverId` — server resource summary, permission-aware power controls, allowlisted properties form and recent operation history. Power/property requests remain queued with `NOT_DISPATCHED` until the secure worker is deployed.

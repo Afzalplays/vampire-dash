@@ -90,7 +90,7 @@ export default function ServersPage() {
       <section style={{marginTop:28}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><h2 style={{fontSize:20}}>Your servers</h2><span style={{color:"#a1a1aa",fontSize:13}}>{servers.length} total</span></div>
         {loading ? <p style={{color:"#a1a1aa"}}>Loading servers…</p> : servers.length === 0 ? <div style={{...panelStyle,textAlign:"center",padding:42}}><div style={{fontSize:32}}>◇</div><b>No servers yet</b><p style={{color:"#a1a1aa"}}>Create your first server when an active entitlement and a compatible release are available.</p></div> :
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",gap:14}}>{servers.map(server=><article key={server.id} style={panelStyle}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",gap:14}}>{servers.map(server=><article key={server.id} style={panelStyle}><a href={`/servers/${encodeURIComponent(server.id)}`} style={{color:"#f87171",fontSize:12,textDecoration:"none"}}>Manage server →</a>
           <div style={{display:"flex",justifyContent:"space-between",gap:10}}><h3 style={{margin:"0 0 14px"}}>{server.name}</h3><span style={{fontSize:11,color:server.status==="RUNNING"?"#86efac":"#fbbf24"}}>{pretty(server.status)}</span></div>
           <p style={{color:"#a1a1aa",fontSize:13}}>{pretty(server.software)} · {server.version}</p>
           <div style={{display:"flex",gap:18,fontSize:13}}><span>{mb(server.memoryMb)} RAM</span><span>{mb(server.diskMb)} Disk</span><span>{server.cpuPercent}% CPU</span></div>
