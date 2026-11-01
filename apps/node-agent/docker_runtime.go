@@ -25,7 +25,35 @@ const (
 	maxDockerResponseBytes = 1 << 20
 )
 
-var dockerContainerIDPattern = regexp.MustCompile(`^[a-f0-9]{64}$`)
+var dockerContainerIDPattern = regexp.MustCompile(`^[a-f0-9]{64}package main
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"net/url"
+	"os"
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
+)
+
+const (
+	dockerAPIVersion = "v1.45"
+	dockerServerLabel = "com.vampirenodes.server_id"
+	dockerNodeLabel = "com.vampirenodes.node_id"
+	maxDockerResponseBytes = 1 << 20
+)
+
+)
+var serverIDPattern = regexp.MustCompile("^[A-Za-z0-9_-]{1,128}$")
 
 type dockerRuntime struct {
 	client *http.Client
@@ -244,213 +272,7 @@ func (d *dockerRuntime) provisionServer(ctx context.Context, job signedNodeJob) 
  if strings.TrimSpace(job.ServerID) == "" || strings.TrimSpace(job.NodeID) == "" { return nil, errors.New("server and node identity are required") }
  if strings.TrimSpace(payload.Name) == "" || len(payload.Name) > 32 || strings.TrimSpace(payload.MinecraftVersion) == "" || len(payload.MinecraftVersion) > 32 || payload.JavaMajor < 8 || payload.JavaMajor > 30 || payload.MemoryMB < 256 || payload.MemoryMB > 4_194_304 || payload.DiskMB < 512 || payload.DiskMB > 16_777_216 || payload.CPUPercent < 10 || payload.CPUPercent > 6400 || payload.Port < 1024 || payload.Port > 65535 { return nil, errors.New("provisioning parameters are outside supported bounds") }
  if !oneOf(payload.Software, "VANILLA", "PAPER", "PURPUR", "FABRIC", "FORGE", "NEOFORGE", "VELOCITY", "BUNGEECORD") { return nil, errors.New("unsupported Java server software") }
- if !regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}package main
-
-import (
-	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"io"
-	"net"
-	"net/http"
-	"net/url"
-	"os"
-	"regexp"
-	"strconv"
-	"strings"
-	"time"
-)
-
-const (
-	dockerAPIVersion = "v1.45"
-	dockerServerLabel = "com.vampirenodes.server_id"
-	dockerNodeLabel = "com.vampirenodes.node_id"
-	maxDockerResponseBytes = 1 << 20
-)
-
-var dockerContainerIDPattern = regexp.MustCompile(`^[a-f0-9]{64}$`)
-
-type dockerRuntime struct {
-	client *http.Client
-	apiBase string
-}
-
-type dockerContainerSummary struct {
-	ID string `json:"Id"`
-	State string `json:"State"`
-	Labels map[string]string `json:"Labels"`
-}
-
-type dockerContainerInspect struct {
-	Config struct {
-		Image string `json:"Image"`
-		Env []string `json:"Env"`
-		Labels map[string]string `json:"Labels"`
-	} `json:"Config"`
-	HostConfig struct {
-		Memory int64 `json:"Memory"`
-		NanoCpus int64 `json:"NanoCpus"`
-		StorageOpt map[string]string `json:"StorageOpt"`
-		PortBindings map[string][]struct { HostIP string `json:"HostIp"`; HostPort string `json:"HostPort"` } `json:"PortBindings"`
-	} `json:"HostConfig"`
-	State struct {
-		Running bool `json:"Running"`
-	} `json:"State"`
-}
-
-// newDockerRuntime connects only to a local Unix-domain Docker socket. The
-// socket must already exist and must not be a symlink or a regular file.
-func newDockerRuntime(socketPath string) (*dockerRuntime, error) {
-	if !strings.HasPrefix(socketPath, "/") {
-		return nil, errors.New("Docker socket path must be absolute")
-	}
-	info, err := os.Lstat(socketPath)
-	if err != nil {
-		return nil, fmt.Errorf("inspect Docker socket: %w", err)
-	}
-	if info.Mode()&os.ModeSocket == 0 || info.Mode()&os.ModeSymlink != 0 {
-		return nil, errors.New("Docker endpoint must be a Unix socket, not a symlink or regular file")
-	}
-	transport := &http.Transport{
-		Proxy: nil,
-		DisableKeepAlives: true,
-		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			return (&net.Dialer{Timeout: 3 * time.Second}).DialContext(ctx, "unix", socketPath)
-		},
-	}
-	return &dockerRuntime{
-		client: &http.Client{
-			Transport: transport,
-			Timeout: 30 * time.Minute,
-			CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse },
-		},
-		apiBase: "http://docker/" + dockerAPIVersion,
-	}, nil
-}
-
-func (d *dockerRuntime) request(ctx context.Context, method, path string) (*http.Response, error) {
-	if d == nil || d.client == nil || d.apiBase == "" {
-		return nil, errors.New("Docker runtime is not configured")
-	}
-	req, err := http.NewRequestWithContext(ctx, method, d.apiBase+path, nil)
-	if err != nil {
-		return nil, errors.New("invalid fixed Docker API request")
-	}
-	response, err := d.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("Docker API request failed: %w", err)
-	}
-	if response.StatusCode >= 300 && response.StatusCode != http.StatusNotModified {
-		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4096))
-		response.Body.Close()
-		return nil, fmt.Errorf("Docker API returned HTTP %d", response.StatusCode)
-	}
-	return response, nil
-}
-
-func (d *dockerRuntime) requestBody(ctx context.Context, method, path string, payload any) (*http.Response, error) {
- if d == nil || d.client == nil || d.apiBase == "" { return nil, errors.New("Docker runtime is not configured") }
- encoded, err := json.Marshal(payload)
- if err != nil { return nil, errors.New("unable to encode fixed Docker request") }
- req, err := http.NewRequestWithContext(ctx, method, d.apiBase+path, bytes.NewReader(encoded))
- if err != nil { return nil, errors.New("invalid fixed Docker API request") }
- req.Header.Set("Content-Type", "application/json")
- response, err := d.client.Do(req)
- if err != nil { return nil, fmt.Errorf("Docker API request failed: %w", err) }
- if response.StatusCode >= 300 && response.StatusCode != http.StatusNotModified { _, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 4096)); response.Body.Close(); return nil, fmt.Errorf("Docker API returned HTTP %d", response.StatusCode) }
- return response, nil
-}
-
-func (d *dockerRuntime) pullImage(ctx context.Context, image string) error {
- query := url.Values{}; query.Set("fromImage", image)
- response, err := d.request(ctx, http.MethodPost, "/images/create?"+query.Encode())
- if err != nil { return err }; defer response.Body.Close()
- scanner := bufio.NewScanner(io.LimitReader(response.Body, 8<<20))
- scanner.Buffer(make([]byte, 64*1024), 256*1024)
- for scanner.Scan() {
-  var event struct { Error string `json:"error"`; ErrorDetail struct { Message string `json:"message"` } `json:"errorDetail"` }
-  if err := json.Unmarshal(scanner.Bytes(), &event); err != nil { return errors.New("Docker image pull returned invalid progress data") }
-  if event.Error != "" { return fmt.Errorf("Docker image pull failed: %s", boundedDockerError(event.Error)) }
-  if event.ErrorDetail.Message != "" { return fmt.Errorf("Docker image pull failed: %s", boundedDockerError(event.ErrorDetail.Message)) }
- }
- if err := scanner.Err(); err != nil { return fmt.Errorf("Docker image pull stream failed: %w", err) }
- return nil
-}
-
-func boundedDockerError(value string) string { if len(value) > 300 { return value[:300] }; return value }
-
-func readDockerJSON(response *http.Response, target any) error {
-	defer response.Body.Close()
-	data, err := io.ReadAll(io.LimitReader(response.Body, maxDockerResponseBytes+1))
-	if err != nil {
-		return errors.New("unable to read Docker API response")
-	}
-	if len(data) > maxDockerResponseBytes {
-		return errors.New("Docker API response exceeds size limit")
-	}
-	if err := json.Unmarshal(data, target); err != nil {
-		return errors.New("Docker API returned invalid JSON")
-	}
-	return nil
-}
-
-func (d *dockerRuntime) resolveServerContainer(ctx context.Context, serverID string) (string, error) {
-	if strings.TrimSpace(serverID) == "" || len(serverID) > 128 {
-		return "", errors.New("server identity is invalid")
-	}
-	filter, _ := json.Marshal(map[string][]string{
-		"label": {dockerServerLabel + "=" + serverID},
-	})
-	query := url.Values{}
-	query.Set("all", "1")
-	query.Set("filters", string(filter))
-	response, err := d.request(ctx, http.MethodGet, "/containers/json?"+query.Encode())
-	if err != nil {
-		return "", err
-	}
-	var containers []dockerContainerSummary
-	if err := readDockerJSON(response, &containers); err != nil {
-		return "", err
-	}
-	var selected string
-	for _, container := range containers {
-		if container.Labels[dockerServerLabel] != serverID {
-			continue
-		}
-		if !dockerContainerIDPattern.MatchString(container.ID) {
-			return "", errors.New("Docker returned an invalid container identity")
-		}
-		if selected != "" {
-			return "", errors.New("multiple Docker containers claim the same server identity")
-		}
-		selected = container.ID
-	}
-	if selected == "" {
-		return "", errors.New("no Docker container is registered for this server identity")
-	}
-	return selected, nil
-}
-
-func (d *dockerRuntime) inspectServerContainer(ctx context.Context, containerID, serverID string) (bool, error) {
-	if !dockerContainerIDPattern.MatchString(containerID) {
-		return false, errors.New("container identity is invalid")
-	}
-	response, err := d.request(ctx, http.MethodGet, "/containers/"+url.PathEscape(containerID)+"/json")
-	if err != nil {
-		return false, err
-	}
-	var inspected dockerContainerInspect
-	if err := readDockerJSON(response, &inspected); err != nil {
-		return false, err
-	}
-	if inspected.Config.Labels[dockerServerLabel] != serverID {
-		return false, errors.New("Docker container server label does not match the requested server")
-	}
-	return inspected.State.Running, nil
-}
-
-).MatchString(job.ServerID) { return nil, errors.New("server ID is not safe for a Docker resource name") }
+ if !serverIDPattern.MatchString(job.ServerID) { return nil, errors.New("server ID is not safe for a Docker resource name") }
  listener, err := net.Listen("tcp", net.JoinHostPort("0.0.0.0", strconv.Itoa(payload.Port)))
  if err != nil { return nil, fmt.Errorf("allocated TCP port is already in use: %w", err) }; _ = listener.Close()
  if err := d.pullImage(ctx, payload.DockerImage); err != nil { return nil, err }
