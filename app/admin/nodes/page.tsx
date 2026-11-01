@@ -28,6 +28,7 @@ export default function AdminNodesPage() {
   const [notice, setNotice] = useState("");
   const [token, setToken] = useState("");
   const [uncertain, setUncertain] = useState<Record<string, UncertainJob[]>>({});
+  const [nodeAddresses, setNodeAddresses] = useState<Record<string, string>>({});
   const [form, setForm] = useState({ name: "", location: "India", endpoint: "", minecraftAddress: "", memoryMb: "8192", diskMb: "81920", allocationStart: "25565", allocationEnd: "25664" });
   const load = useCallback(async () => {
     setLoading(true); setError("");
@@ -51,6 +52,16 @@ export default function AdminNodesPage() {
     } catch (e) { setError(e instanceof Error ? e.message : "Node action failed"); }
     finally { setBusy(""); }
   }
+  async function saveNodeAddress(nodeId: string) {
+    setBusy(nodeId + "address"); setError(""); setNotice("");
+    try {
+      const address = nodeAddresses[nodeId] ?? nodes.find(node => node.id === nodeId)?.minecraftAddress ?? "";
+      await api(`/admin/nodes/${encodeURIComponent(nodeId)}`, { method: "PATCH", body: JSON.stringify({ minecraftAddress: address }) });
+      setNotice("Public Minecraft address saved."); await load();
+    } catch (e) { setError(e instanceof Error ? e.message : "Address update failed"); }
+    finally { setBusy(""); }
+  }
+
   async function createNode(event: React.FormEvent) {
     event.preventDefault(); setBusy("create"); setError(""); setNotice(""); setToken("");
     try {
@@ -90,7 +101,7 @@ export default function AdminNodesPage() {
       <section style={{ display: "grid", gap: 12 }}>
         {loading ? <p style={{ color: "#a1a1aa" }}>Loading nodes…</p> : nodes.length === 0 ? <div style={panel}>No nodes registered yet.</div> : nodes.map(node => <article key={node.id} style={panel}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
-            <div><h2 style={{ margin: "0 0 6px", fontSize: 19 }}>{node.name}</h2><p style={{ margin: 0, color: "#a1a1aa", fontSize: 13 }}>{node.location} · Agent: {node.endpoint} · Minecraft: {node.minecraftAddress || "not set"}</p><p style={{ margin: "8px 0", fontSize: 13 }}>Health: <b style={{ color: node.healthStatus === "ONLINE" ? "#86efac" : "#fbbf24" }}>{node.healthStatus}</b> · {node.enabled ? "Enabled" : "Disabled"} · Agent {node.agentVersion || "unknown"}</p></div>
+            <div><h2 style={{ margin: "0 0 6px", fontSize: 19 }}>{node.name}</h2><p style={{ margin: 0, color: "#a1a1aa", fontSize: 13 }}>{node.location} · Agent: {node.endpoint} · Minecraft: {node.minecraftAddress || "not set"}</p><div style={{ display: "flex", gap: 8, marginTop: 8, maxWidth: 520 }}><input aria-label={`Public Minecraft address for ${node.name}`} placeholder="Public DNS name or IP" style={field} value={nodeAddresses[node.id] ?? node.minecraftAddress ?? ""} onChange={e => setNodeAddresses(old => ({ ...old, [node.id]: e.target.value }))}/><button style={action} disabled={!!busy} onClick={() => void saveNodeAddress(node.id)}>Save address</button></div><p style={{ margin: "8px 0", fontSize: 13 }}>Health: <b style={{ color: node.healthStatus === "ONLINE" ? "#86efac" : "#fbbf24" }}>{node.healthStatus}</b> · {node.enabled ? "Enabled" : "Disabled"} · Agent {node.agentVersion || "unknown"}</p></div>
             <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
               <button style={action} disabled={!!busy} onClick={() => void run(node.id, "check")}>Check mTLS</button>
               {node.enabled ? <button style={action} disabled={!!busy} onClick={() => void run(node.id, "disable")}>Disable</button> : <button style={action} disabled={!!busy || node.healthStatus !== "ONLINE"} onClick={() => void run(node.id, "enable")}>Enable</button>}
