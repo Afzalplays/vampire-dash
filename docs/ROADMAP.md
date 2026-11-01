@@ -17,7 +17,7 @@
 - [ ] Automated node enrollment, credential rotation and revocation
 - [x] Durable idempotent server-operation queue schema for software and utility actions
 - [x] Owner and permission-scoped subuser operation request/history API (execution pending)
-- [x] Customer server creation API with active entitlement, slot/resource quota enforcement and healthy-node capacity selection (provisioning pending)
+- [x] Customer server creation API with active entitlement, slot limits, RAM/disk/CPU capacity checks, healthy-node selection and transactional TCP port allocation (Docker provisioning pending)
 - [x] Typed signed node-job envelope validation with strict action payload schemas
 - [x] Durable per-operation node-job outbox with unique nonce, bounded attempts, lease metadata and retry indexes
 - [x] Node-authenticated job claim, acknowledgement, lease renewal and result API endpoints
@@ -31,7 +31,8 @@
 - [x] Active lease renewal during long-running execution
 - [x] Signed START/STOP/RESTART execution, retries, cancellation and result reconciliation (UPDATE_PROPERTIES pending)
 - [ ] Server lifecycle state machine and reconciliation worker
-- [ ] Port allocation and firewall integration
+- [x] Transactional per-node TCP port allocation with configurable ranges and uniqueness constraints
+- [ ] Docker port publication and host firewall integration
 - [ ] WebSocket console with authorization and audit logging
 - [ ] File manager with path confinement and upload limits
 - [ ] Backup, restore and scheduled retention
