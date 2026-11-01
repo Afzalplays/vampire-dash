@@ -153,6 +153,8 @@ func TestPollerBlocksNewClaimsWhileAnOperationIsUnresolved(t *testing.T) {
  p := newTestPoller(panel, executor, t.TempDir())
  unresolved := operationTestRecord(stageAccepted)
  if err := advanceOperationJournal(p.journalPath+".operations.jsonl", unresolved); err != nil { t.Fatal(err) }
+ unresolved.Stage = stageAckConfirmed
+ if err := advanceOperationJournal(p.journalPath+".operations.jsonl", unresolved); err != nil { t.Fatal(err) }
  unresolved.Stage = stageExecutionStarted
  if err := advanceOperationJournal(p.journalPath+".operations.jsonl", unresolved); err != nil { t.Fatal(err) }
  if err := p.pollOnce(context.Background()); err == nil || !strings.Contains(err.Error(), "reconciliation is required") {
