@@ -15,10 +15,13 @@ type fakeJobPanel struct {
  ackErr error
  resultErr error
  acks int
+ renewals int
+ renewErr error
  results []jobResultRequest
 }
 func (f *fakeJobPanel) claim(context.Context) (*claimResponse, []byte, error) { return f.response, f.body, f.claimErr }
 func (f *fakeJobPanel) acknowledge(context.Context, string, string) error { f.acks++; return f.ackErr }
+func (f *fakeJobPanel) renew(context.Context, string, string) (time.Time, error) { f.renewals++; return time.Now().Add(time.Minute), f.renewErr }
 func (f *fakeJobPanel) reportResult(_ context.Context, _ string, result jobResultRequest) error { f.results = append(f.results, result); return f.resultErr }
 
 type fakeJobExecutor struct { calls int; err error }
@@ -33,7 +36,7 @@ func testPollerJob(t *testing.T, action string) (*claimResponse, []byte) {
  return &claimResponse{Signature: "sha256=" + signJob(body), LeaseToken: testLeaseToken, LeaseExpiresAt: now.Add(time.Minute)}, body
 }
 func newTestPoller(panel *fakeJobPanel, executor *fakeJobExecutor, dir string) *nodeJobPoller {
- return &nodeJobPoller{panel: panel, executor: executor, nodeID: "node-a", signingKey: jobTestSecret, journalPath: filepath.Join(dir, "replay.jsonl"), interval: time.Second}
+ return &nodeJobPoller{panel: panel, executor: executor, nodeID: "node-a", signingKey: jobTestSecret, journalPath: filepath.Join(dir, "replay.jsonl"), interval: time.Second, leaseRenewInterval: 30 * time.Second}
 }
 func TestPollerRequiresExecutorBeforePolling(t *testing.T) {
  p := newTestPoller(&fakeJobPanel{}, nil, t.TempDir())
@@ -67,4 +70,10 @@ func TestBoundedErrorTrimsAndLimitsMessage(t *testing.T) {
  if got := boundedError("  runtime unavailable  ", 20); got != "runtime unavailable" { t.Fatalf("unexpected trimmed error: %q", got) }
  if got := boundedError("123456789", 5); got != "12345" { t.Fatalf("unexpected bounded error: %q", got) }
  if got := boundedError("   ", 5); got != "" { t.Fatalf("expected empty trimmed error, got %q", got) }
+}
+
+func TestPollerRequiresSafeLeaseRenewalInterval(t *testing.T) {
+ p := newTestPoller(&fakeJobPanel{}, &fakeJobExecutor{}, t.TempDir())
+ p.leaseRenewInterval = 31 * time.Second
+ if err := p.validate(); err == nil { t.Fatal("expected excessive lease renewal interval to be rejected") }
 }
