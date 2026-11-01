@@ -58,7 +58,7 @@ export const serverRoutes: FastifyPluginAsync = async (app) => {
           where: { software: parsed.data.software, minecraftVersion: parsed.data.version, enabled: true },
           select: { id: true, dockerImage: true, javaMajor: true },
         });
-        if (!release || !/^(?:docker\\.io\\/)?itzg\\/minecraft-server@sha256:[a-f0-9]{64}$/.test(release.dockerImage)) throw new Error("SOFTWARE_RELEASE_UNAVAILABLE");
+        if (!release || !/^(?:docker\.io\/)?itzg\/minecraft-server@sha256:[a-f0-9]{64}$/.test(release.dockerImage)) throw new Error("SOFTWARE_RELEASE_UNAVAILABLE");
 
         const candidates = await tx.$queryRaw<Array<{ id: string }>>`SELECT "id" FROM "MinecraftNode" WHERE "enabled" = true AND "healthStatus" = 'ONLINE' AND "lastSeenAt" > NOW() - INTERVAL '3 minutes' ORDER BY "reservedMemoryMb" ASC, "reservedDiskMb" ASC FOR UPDATE SKIP LOCKED`;
         for (const candidate of candidates) {
