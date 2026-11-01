@@ -6,7 +6,7 @@ The panel API has a durable `NodeAgentJob` outbox record per operation, bound to
 
 The `worker:agent-jobs` recovery process retries expired pre-acknowledgement leases with bounded backoff. Expired acknowledged leases fail closed rather than replaying potentially side-effecting work.
 
-The Go agent has strict signed-envelope validation and an append-only, fsync-backed replay journal protected by a file lock. The journal stores the SHA-256 digest of the exact signed body. A byte-identical redelivery is recognized as an already accepted duplicate; reuse of a job ID or nonce with different content fails closed.
+The Go agent has strict signed-envelope validation and an append-only, fsync-backed replay journal protected by a file lock. The journal stores a SHA-256 digest of immutable operation identity (job ID, node ID, nonce, action and canonical payload), excluding lease timestamps. The exact envelope bytes are still HMAC-authenticated. Reissued leases with new timestamps are recognized as the same accepted operation; reuse of a job ID or nonce with different operation content fails closed.
 
 The Go panel HTTPS client supports bounded claim, acknowledgement, renewal and result requests. It rejects non-HTTPS panel URLs, blocks redirects to prevent bearer-token disclosure, bounds response sizes and supports an optional private panel CA while retaining system trust roots.
 
