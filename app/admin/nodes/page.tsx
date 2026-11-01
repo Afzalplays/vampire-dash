@@ -66,7 +66,7 @@ export default function AdminNodesPage() {
   const copyToken = async () => { try { await navigator.clipboard.writeText(token); setNotice("Agent token copied."); } catch { setError("Clipboard access failed; copy the token manually."); } };
   return <main style={{ minHeight: "100vh", background: "#09090d", color: "#f4f4f5", padding: "28px clamp(16px,4vw,56px)", fontFamily: "Arial,sans-serif" }}>
     <div style={{ maxWidth: 1200, margin: "0 auto" }}>
-      <a href="/" style={{ color: "#f87171", textDecoration: "none" }}>← Control center</a>
+      <div style={{ display: "flex", gap: 14 }}><a href="/" style={{ color: "#f87171", textDecoration: "none" }}>← Control center</a><a href="/admin/releases" style={{ color: "#a1a1aa", textDecoration: "none" }}>Software releases →</a></div>
       <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", margin: "22px 0" }}>
         <div><small style={{ color: "#f87171", letterSpacing: 2 }}>VAMPIRE DASH / ADMIN</small><h1 style={{ margin: "7px 0", fontSize: 32 }}>Node management</h1><p style={{ color: "#a1a1aa", margin: 0 }}>Register nodes, verify mTLS, activate workers and inspect uncertain operations.</p></div>
         <button style={action} onClick={() => void load()}>Refresh nodes</button>
