@@ -77,3 +77,23 @@ func TestPollerRequiresSafeLeaseRenewalInterval(t *testing.T) {
  p.leaseRenewInterval = 31 * time.Second
  if err := p.validate(); err == nil { t.Fatal("expected excessive lease renewal interval to be rejected") }
 }
+
+func TestPollerDoesNotExecuteWhenAcknowledgementFails(t *testing.T) {
+ response, body := testPollerJob(t, "START")
+ panel, executor := &fakeJobPanel{response: response, body: body, ackErr: errors.New("ack timeout")}, &fakeJobExecutor{}
+ p := newTestPoller(panel, executor, t.TempDir())
+ if err := p.pollOnce(context.Background()); err == nil { t.Fatal("expected acknowledgement failure") }
+ if executor.calls != 0 || len(panel.results) != 0 {
+  t.Fatalf("job executed after failed ACK: calls=%d results=%d", executor.calls, len(panel.results))
+ }
+}
+
+func TestPollerReturnsErrorWhenResultSubmissionFails(t *testing.T) {
+ response, body := testPollerJob(t, "START")
+ panel, executor := &fakeJobPanel{response: response, body: body, resultErr: errors.New("result endpoint unavailable")}, &fakeJobExecutor{}
+ p := newTestPoller(panel, executor, t.TempDir())
+ if err := p.pollOnce(context.Background()); err == nil { t.Fatal("expected result submission failure") }
+ if executor.calls != 1 || len(panel.results) != 1 {
+  t.Fatalf("expected one execution and one attempted result: calls=%d results=%d", executor.calls, len(panel.results))
+ }
+}
