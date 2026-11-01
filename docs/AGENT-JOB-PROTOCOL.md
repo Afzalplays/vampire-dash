@@ -4,9 +4,14 @@
 
 The agent currently exposes read-only health and capacity telemetry. The signed
 job envelope validator in `jobs.go` is a tested protocol foundation only:
-there is no job HTTP endpoint, polling loop, database lease, replay store,
+there is no job HTTP endpoint, polling loop, database lease worker, replay store,
 container runtime, or command execution. The panel must continue to report
 server operations as `NOT_DISPATCHED`.
+
+The API now has a durable `NodeAgentJob` outbox record per operation, bound to
+one node, with a unique nonce, bounded retry count, lease token hash and lease
+expiry fields. The schema is storage only: no code currently creates, leases,
+or dispatches these records.
 
 ## Envelope
 
@@ -37,10 +42,10 @@ variable injection and user-defined executable commands are forbidden.
 
 ## Required before enabling dispatch
 
-1. Persist nonce/job replay protection across restarts and atomically claim a
-   unique job ID.
-2. Use database-backed leases with bounded attempts, lease expiry, heartbeat,
-   cancellation semantics and idempotent result reconciliation.
+1. Persist agent-side nonce replay protection across restarts and atomically
+   reject duplicate job IDs/nonces.
+2. Implement database-backed leases with bounded attempts, lease expiry,
+   heartbeat, cancellation semantics and idempotent result reconciliation.
 3. Authenticate node identity and rotate per-node HMAC keys; retain mandatory
    mTLS certificate verification.
 4. Add a typed runtime adapter that maps actions to fixed container APIs; never

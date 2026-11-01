@@ -20,7 +20,7 @@
 - [x] Owner and permission-scoped subuser operation request/history API (queue only; dispatch pending)
 - [x] Customer server creation API with active entitlement, slot/resource quota enforcement and healthy-node capacity selection (provisioning dispatch pending)
 - [x] Typed signed node-job envelope validation (no endpoint, replay store, lease or execution yet)
-- [ ] Persisted replay protection, job leases and secure panel-to-agent dispatch
+- [x] Durable per-operation node-job outbox schema with unique nonce, bounded attempts, lease metadata and retry indexes\n- [ ] Persisted replay protection at agent, job lease worker and secure panel-to-agent dispatch
 - [ ] Operation worker, retries, cancellation and reconciliation
 - [ ] Docker provisioning with per-server isolation and strict resource limits
 - [ ] Server lifecycle state machine and reconciliation worker
