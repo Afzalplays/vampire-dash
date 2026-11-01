@@ -61,6 +61,14 @@ func operationStageNumber(stage operationStage) int {
 	}
 }
 
+func syncOperationJournalDirectory(path string) error {
+	dir, err := os.Open(filepath.Dir(path))
+	if err != nil { return fmt.Errorf("open operation journal directory: %w", err) }
+	defer dir.Close()
+	if err := dir.Sync(); err != nil { return fmt.Errorf("sync operation journal directory: %w", err) }
+	return nil
+}
+
 func validateOperationJournalRecord(record operationJournalRecord) error {
 	if !replayJobIDPattern.MatchString(record.JobID) || record.NodeID == "" || len(record.NodeID) > 128 || !replayNoncePattern.MatchString(record.Nonce) ||
 		!replayBodyHashPattern.MatchString(record.IdentityHash) || !validOperationStage(record.Stage) {
@@ -189,6 +197,7 @@ func advanceOperationJournal(path string, next operationJournalRecord) error {
 	if err := file.Sync(); err != nil {
 		return fmt.Errorf("sync operation journal: %w", err)
 	}
+	if err := syncOperationJournalDirectory(path); err != nil { return err }
 	return nil
 }
 
