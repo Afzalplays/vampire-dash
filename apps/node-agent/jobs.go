@@ -34,6 +34,55 @@ type signedNodeJob struct {
 
 type powerJobPayload struct{}
 
+type provisionJobPayload struct {
+ Name string `json:"name"`
+ Software string `json:"software"`
+ MinecraftVersion string `json:"minecraftVersion"`
+ DockerImage string `json:"dockerImage"`
+ JavaMajor int `json:"javaMajor"`
+ MemoryMB int64 `json:"memoryMb"`
+ DiskMB int64 `json:"diskMb"`
+ CPUPercent int64 `json:"cpuPercent"`
+ Port int `json:"port"`
+}
+
+var dockerImagePattern = regexp.MustCompile(`^[A-Za-z0-9._/:@-]{3,255}package main
+
+import (
+	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"regexp"
+	"strings"
+	"time"
+)
+
+const maxJobBodyBytes = 16 * 1024
+const maxJobClockSkew = 30 * time.Second
+const maxJobLifetime = 2 * time.Minute
+
+var jobIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{16,128}$`)
+var noncePattern = regexp.MustCompile(`^[A-Fa-f0-9]{32,128}$`)
+
+type signedNodeJob struct {
+	ID        string          `json:"id"`
+	NodeID    string          `json:"nodeId"`
+	Nonce     string          `json:"nonce"`
+	ServerID  string          `json:"serverId"`
+	IssuedAt  time.Time       `json:"issuedAt"`
+	ExpiresAt time.Time       `json:"expiresAt"`
+	Action    string          `json:"action"`
+	Payload   json.RawMessage `json:"payload"`
+}
+
+type powerJobPayload struct{}
+
+)
 type propertyJobPayload struct {
 	MOTD               *string `json:"motd,omitempty"`
 	Difficulty         *string `json:"difficulty,omitempty"`
@@ -94,6 +143,12 @@ func validateSignedNodeJob(body []byte, signature, secret, nodeID string, now ti
 	}
 
 	switch job.Action {
+	case "PROVISION_SERVER":
+		var payload provisionJobPayload
+		if err := decodeStrictPayload(job.Payload, &payload); err != nil { return job, errors.New("invalid provisioning payload") }
+		if strings.TrimSpace(payload.Name) == "" || len(payload.Name) > 32 || payload.MemoryMB < 256 || payload.DiskMB < 512 || payload.CPUPercent < 10 || payload.CPUPercent > 6400 || payload.Port < 1024 || payload.Port > 65535 || payload.JavaMajor < 8 || payload.JavaMajor > 30 || !dockerImagePattern.MatchString(payload.DockerImage) { return job, errors.New("provisioning resource or image parameters are invalid") }
+		if !oneOf(payload.Software, "VANILLA", "PAPER", "PURPUR", "FABRIC", "FORGE", "NEOFORGE", "VELOCITY", "BUNGEECORD") { return job, errors.New("provisioning software is not supported by the Java runtime") }
+		if strings.TrimSpace(payload.MinecraftVersion) == "" || len(payload.MinecraftVersion) > 32 { return job, errors.New("Minecraft version is invalid") }
 	case "START", "STOP", "RESTART":
 		var payload powerJobPayload
 		if err := decodeStrictPayload(job.Payload, &payload); err != nil {
