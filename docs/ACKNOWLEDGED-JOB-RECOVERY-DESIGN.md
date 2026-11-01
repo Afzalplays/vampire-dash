@@ -35,9 +35,9 @@ The executor persists EXECUTION_STARTED before the runtime call and RESULT_PENDI
 ## Rollout gates
 
 1. Implement the journal and fault-injection tests for each transition and corrupt/torn records.
-2. Add a server-derived immutable operation digest and a migration with a safe backfill strategy.
-3. Implement reconciliation with transaction, idempotency, and cross-node isolation tests.
-4. Test lost ACK responses, crashes before and after runtime completion, lost result responses, duplicate reconciliation, conflicting result hashes, expired leases, and superseded operations.
+2. The signed envelope and replay identity now bind the immutable server ID; retain cross-language hash compatibility tests when the protocol changes.
+3. Reconciliation has database integration coverage for matching results, duplicate commits, identity conflicts, and live leases; add cross-node isolation and transaction-failure cases.
+4. Add fault-injection tests for lost ACK responses, crashes before and after runtime completion, lost result responses, conflicting result hashes, expired leases, and superseded operations.
 5. Implement desired-state runtime operations for START, STOP, and properties; keep RESTART fail-closed until it has a true idempotency mechanism.
 6. Run Go, TypeScript, Prisma migration, and integration suites in CI; review logs for credential and payload leakage.
 7. Consider a limited canary only after every gate passes. Production dispatch remains disabled until then.
@@ -53,4 +53,4 @@ The node-authenticated reconciliation endpoint and the Go panel client are now i
 
 Implemented since the initial recovery milestone: administrator-triggered node credential rotation (with immediate revocation, node disablement, and an acknowledged-job guard), plus a read-only administrator endpoint to inspect uncertain jobs. Operator handling documentation is in `docs/NODE-CREDENTIAL-ROTATION.md` and `docs/UNCERTAIN-JOB-OPERATIONS.md`.
 
-Still not implemented: route-level database integration tests for reconciliation and credential rotation, a typed production Docker runtime adapter, runtime integration/fault-injection tests, and production startup wiring. The agent remains undispatched in production.
+Still not implemented: route-level database integration tests for credential rotation, additional reconciliation isolation/failure tests, a typed production Docker runtime adapter, runtime integration/fault-injection tests, and production startup wiring. The agent remains undispatched in production.
