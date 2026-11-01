@@ -69,6 +69,8 @@ func TestPanelClientLeaseLifecycleRequests(t *testing.T) {
    w.Header().Set("Content-Type", "application/json"); _ = json.NewEncoder(w).Encode(map[string]any{"ok":true,"leaseExpiresAt":expires.Format(time.RFC3339)})
   case strings.HasSuffix(r.URL.Path, "/result"):
    w.Header().Set("Content-Type", "application/json"); _, _ = w.Write([]byte(`{"ok":true,"status":"SUCCEEDED"}`))
+  case strings.HasSuffix(r.URL.Path, "/reconcile"):
+   w.Header().Set("Content-Type", "application/json"); _, _ = w.Write([]byte(`{"ok":true,"status":"RESULT_ACCEPTED"}`))
   default: http.NotFound(w,r)
   }
  }))
@@ -78,7 +80,9 @@ func TestPanelClientLeaseLifecycleRequests(t *testing.T) {
  got, err := client.renew(context.Background(), "job_123456789012", testLeaseToken); if err != nil { t.Fatal(err) }
  if !got.Equal(expires) { t.Fatalf("renew expiry mismatch: %v != %v", got, expires) }
  if err := client.reportResult(context.Background(), "job_123456789012", jobResultRequest{LeaseToken:testLeaseToken, Status:"SUCCEEDED", Result:map[string]any{"ok":true}}); err != nil { t.Fatal(err) }
- if len(seen)!=3 || !strings.HasSuffix(seen[0],"/ack") || !strings.HasSuffix(seen[1],"/renew") || !strings.HasSuffix(seen[2],"/result") { t.Fatalf("unexpected request sequence: %v",seen) }
+ status, err := client.reconcile(context.Background(), "job_123456789012", replayHash("identity"), string(stageResultPending), replayHash("result"), map[string]any{"status":"SUCCEEDED"})
+ if err != nil || status != "RESULT_ACCEPTED" { t.Fatalf("reconcile status=%s err=%v", status, err) }
+ if len(seen)!=4 || !strings.HasSuffix(seen[0],"/ack") || !strings.HasSuffix(seen[1],"/renew") || !strings.HasSuffix(seen[2],"/result") || !strings.HasSuffix(seen[3],"/reconcile") { t.Fatalf("unexpected request sequence: %v",seen) }
 }
 
 func TestPanelClientRejectsInvalidResultBeforeNetwork(t *testing.T) {
