@@ -30,8 +30,6 @@ export const operationRoutes: FastifyPluginAsync = async (app) => {
     const body = operationRequest.safeParse(request.body);
     if (!params.success || !body.success) return reply.code(400).send({ error: "Invalid server operation", details: body.success ? undefined : body.error.flatten() });
 
-    if (body.data.type === "UPDATE_PROPERTIES") return reply.code(409).send({ error: "Server properties updates are not available until the verified file adapter is enabled" });
-
     const server = await prisma.minecraftServer.findUnique({
       where: { id: params.data.serverId },
       select: { id: true, ownerId: true, nodeId: true, status: true },
