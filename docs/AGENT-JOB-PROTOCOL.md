@@ -14,7 +14,7 @@ A testable polling state machine now connects the panel client contract, signatu
 
 Acknowledged-job recovery is partially implemented: durable operation checkpoints, pending-result reconciliation, server-derived operation identity, and database integration tests cover accepted results, idempotent duplicate reconciliation, identity conflicts, and live acknowledged leases. The immutable identity now includes the panel-owned server ID, node ID, job ID, nonce, action, and canonical payload. Administrator tooling exposes uncertain jobs read-only; node credential rotation disables the node until reconfiguration and health verification.
 
-The agent currently exposes read-only health and capacity telemetry. It has no Docker runtime adapter or production server-operation execution. Customer operations must remain undispatched. The recovery implementation and remaining rollout gates are documented in [ACKNOWLEDGED-JOB-RECOVERY-DESIGN.md](./ACKNOWLEDGED-JOB-RECOVERY-DESIGN.md).
+A typed Docker Engine adapter now implements idempotent desired-state START and STOP through a local Unix socket. It resolves a server ID only through an exact panel-owned Docker label, rejects missing/duplicate/mismatched mappings, validates full container IDs returned by Docker, bounds responses, and uses fixed API endpoints without shell execution. RESTART and UPDATE_PROPERTIES intentionally fail closed. The adapter is not wired into startup, and the provisioning path that creates trusted server labels is not implemented. Customer operations must remain undispatched. The recovery implementation and remaining rollout gates are documented in [ACKNOWLEDGED-JOB-RECOVERY-DESIGN.md](./ACKNOWLEDGED-JOB-RECOVERY-DESIGN.md).
 
 ## Envelope
 
