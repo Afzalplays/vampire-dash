@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -120,7 +122,7 @@ func (d *dockerRuntime) pullImage(ctx context.Context, image string) error {
  query := url.Values{}; query.Set("fromImage", image)
  response, err := d.request(ctx, http.MethodPost, "/images/create?"+query.Encode())
  if err != nil { return err }; defer response.Body.Close()
- scanner := bufio.NewScanner(io.LimitReader(response.Body, 8<<20))
+ scanner := bufio.NewScanner(response.Body)
  scanner.Buffer(make([]byte, 64*1024), 256*1024)
  for scanner.Scan() {
   var event struct { Error string `json:"error"`; ErrorDetail struct { Message string `json:"message"` } `json:"errorDetail"` }
