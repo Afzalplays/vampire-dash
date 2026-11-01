@@ -4,6 +4,7 @@ import (
  "context"
  "errors"
  "fmt"
+ "log"
  "strings"
  "time"
 )
@@ -44,8 +45,8 @@ func (p *nodeJobPoller) run(ctx context.Context) error {
  defer ticker.Stop()
  for {
   if err := p.pollOnce(ctx); err != nil && !errors.Is(err, context.Canceled) {
-   // Transient errors are retried on the next tick; panel lease recovery
-   // handles a claim whose lease expires while the agent is unavailable.
+   // Never log job payloads, lease tokens, or signatures.
+   log.Printf("node job poll failed: %v", err)
   }
   select {
   case <-ctx.Done(): return ctx.Err()
