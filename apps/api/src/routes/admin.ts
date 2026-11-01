@@ -420,6 +420,20 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     };
   });
 
+  app.post("/nodes/:nodeId/enable", async (request, reply) => {
+    const admin = await requireAdmin(request, reply); if (!admin) return;
+    const params = z.object({ nodeId: z.string().min(1).max(128) }).safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ error: "Invalid node ID" });
+    const node = await prisma.minecraftNode.findUnique({ where: { id: params.data.nodeId }, select: { id: true, name: true, enabled: true, healthStatus: true, lastSeenAt: true, tokenCiphertext: true, tokenNonce: true, tokenAuthTag: true } });
+    if (!node) return reply.code(404).send({ error: "Node not found" });
+    const recentlyVerified = node.lastSeenAt !== null && Date.now() - node.lastSeenAt.getTime() < 3 * 60 * 1000;
+    if (node.healthStatus !== "ONLINE" || !recentlyVerified || !node.tokenCiphertext || !node.tokenNonce || !node.tokenAuthTag) {
+      return reply.code(409).send({ error: "Run a successful mTLS node health check first; node credentials and a recent online heartbeat are required" });
+    }
+    const updated = await prisma.minecraftNode.update({ where: { id: node.id }, data: { enabled: true } });
+    await prisma.auditLog.create({ data: { actorUserId: admin.id, action: "NODE_ENABLED", targetId: node.id, details: `Enabled node ${node.name} after a recent successful mTLS health check` } });
+    return { ok: true, enabled: updated.enabled, nodeId: node.id };
+  });
   app.post("/nodes/:nodeId/disable", async (request, reply) => {
     const admin = await requireAdmin(request, reply); if (!admin) return;
     const params = z.object({ nodeId: z.string().min(1).max(128) }).safeParse(request.params);
