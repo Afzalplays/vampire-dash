@@ -8,6 +8,7 @@ import (
  "errors"
  "fmt"
  "log"
+ "reflect"
  "strings"
  "time"
 )
@@ -36,7 +37,7 @@ type nodeJobPoller struct {
 }
 
 func (p *nodeJobPoller) validate() error {
- if p.panel == nil || p.executor == nil { return errors.New("job poller requires a panel client and an execution adapter") }
+ if p.panel == nil || p.executor == nil || (reflect.ValueOf(p.executor).Kind() == reflect.Ptr && reflect.ValueOf(p.executor).IsNil()) { return errors.New("job poller requires a panel client and an execution adapter") }
  if p.leaseRenewInterval < time.Second || p.leaseRenewInterval > 30*time.Second { return errors.New("lease renewal interval must be between 1 and 30 seconds") }
  if p.nodeID == "" || len(p.signingKey) < 32 { return errors.New("job poller requires a node ID and a 256-bit signing key") }
  if p.journalPath == "" { return errors.New("job poller requires a persistent replay journal path") }
