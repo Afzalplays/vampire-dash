@@ -18,7 +18,7 @@
 - [ ] Connect reservations to customer server creation and server lifecycle transitions
 - [x] Durable idempotent server-operation queue schema for software and utility actions
 - [x] Owner and permission-scoped subuser operation request/history API (queue only; dispatch pending)
-- [ ] Customer server creation API with entitlement/quota enforcement and reservation consumption
+- [x] Customer server creation API with active entitlement, slot/resource quota enforcement and healthy-node capacity selection (provisioning dispatch pending)
 - [ ] Provisioning outbox dispatcher and secure node-agent job protocol
 - [ ] Operation worker, retries, cancellation and reconciliation
 - [ ] Docker provisioning with per-server isolation and strict resource limits
@@ -30,11 +30,11 @@
 
 ## Customer and admin experience
 - [x] Owner-managed server subusers with granular permissions and audited access revocation (available to free server owners)
-- [ ] Customer server list and server detail views backed by API
+- [x] Customer server list view backed by server and entitlement APIs; detail view pending
 - [ ] Admin node, allocation, user and server management
 - [x] Database-backed plan catalogue and customer entitlement read APIs
 - [ ] Admin plan CRUD UI and plan purchase/renewal flow
-- [ ] Enforce entitlement quotas during server creation
+- [x] Enforce entitlement quotas during server creation
 - [x] Curated Minecraft software release catalogue API with admin registration and public filters
 - [ ] Automated upstream release sync, runtime compatibility resolver and verified image allowlist
 - [x] Plugin/mod/modpack provider project and pinned-file catalogue schema with admin registration and public compatibility filters
