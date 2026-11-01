@@ -12,7 +12,7 @@ type Entitlement = {
   id: string; expiresAt: string;
   plan: { name: string; memoryMb: number; diskMb: number; cpuPercent: number; serverSlots: number };
 };
-const software = ["PAPER", "PURPUR", "VANILLA", "FABRIC", "FORGE", "NEOFORGE", "VELOCITY", "BUNGEECORD", "BEDROCK"];
+const software = ["PAPER", "PURPUR", "VANILLA", "FABRIC", "FORGE", "NEOFORGE", "VELOCITY", "BUNGEECORD"];
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api${path}`, {
