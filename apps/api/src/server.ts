@@ -16,6 +16,7 @@ import { artifactRoutes } from "./routes/artifacts.js";
 import { operationRoutes } from "./routes/operations.js";
 import { subuserRoutes } from "./routes/subusers.js";
 import { serverRoutes } from "./routes/servers.js";
+import { adminPlanRoutes } from "./routes/admin-plans.js";
 
 const app = Fastify({ logger: true, trustProxy: false, bodyLimit: 1024 * 1024 });
 await app.register(helmet);
@@ -27,6 +28,7 @@ await app.register(healthRoutes, { prefix: "/api/health" });
 await app.register(authRoutes, { prefix: "/api/auth" });
 await app.register(billingRoutes, { prefix: "/api/billing" });
 await app.register(adminRoutes, { prefix: "/api/admin" });
+await app.register(adminPlanRoutes, { prefix: "/api/admin" });
 await app.register(notificationRoutes, { prefix: "/api/notifications" });
 await app.register(planRoutes, { prefix: "/api/plans" });
 await app.register(softwareRoutes, { prefix: "/api/software" });

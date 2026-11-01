@@ -28,6 +28,11 @@ Server responses never expose node-agent credentials or the node's private agent
 
 The catalogue is empty until an administrator adds verified releases. Adding a catalogue record does not download, install or provision a server. Container image references and artifact metadata must be verified before enabling a release.
 
+## Admin plans
+- `GET /admin/plans` — list all plans, including disabled plans.
+- `POST /admin/plans` — create a plan; new plans default to disabled. Price is an integer in paise.
+- `PATCH /admin/plans/:planId` — update plan details or enable/disable it. Plan changes are audited; plans are not deleted so entitlement history remains intact.
+
 ## Admin
 - `GET /admin/nodes` — list nodes with configured capacity, reserved capacity, overhead and telemetry.
 - `POST /admin/nodes` — register a disabled node using an HTTPS endpoint and bounded capacity values; returns a random agent token once.
