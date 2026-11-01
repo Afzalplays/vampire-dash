@@ -59,8 +59,8 @@ export default function ServersPage() {
       const result = await api<{provisioning: string}>("/servers", {
         method: "POST", body: JSON.stringify({ entitlementId, name, software: kind, version }),
       });
-      setNotice(result.provisioning === "PENDING_AGENT_DISPATCH"
-        ? "Server request accepted. It is pending secure node-agent provisioning; it is not running yet."
+      setNotice(result.provisioning === "QUEUED_FOR_NODE_AGENT"
+        ? "Server created and provisioning job queued. It will start when its node agent is online and enabled."
         : "Server request accepted.");
       setName(""); await load();
     } catch (e) { setError(e instanceof Error ? e.message : "Server creation failed"); }
