@@ -4,6 +4,7 @@ import (
  "bytes"
  "context"
  "crypto/tls"
+ "encoding/json"
  "errors"
  "fmt"
  "io"
@@ -22,6 +23,16 @@ type panelClient struct {
  http *http.Client
 }
 
+type leaseRequest struct { LeaseToken string `json:"leaseToken"` }
+type leaseRenewal struct { OK bool `json:"ok"`; LeaseExpiresAt time.Time `json:"leaseExpiresAt"` }
+type jobResultRequest struct {
+ LeaseToken string `json:"leaseToken"`
+ Status string `json:"status"`
+ Result map[string]any `json:"result,omitempty"`
+ ErrorCode string `json:"errorCode,omitempty"`
+ ErrorMessage string `json:"errorMessage,omitempty"`
+}
+
 // newPanelClient accepts only HTTPS and never follows redirects, preventing
 // accidental disclosure of the node bearer token to another host.
 func newPanelClient(rawURL, token string) (*panelClient, error) {
@@ -30,40 +41,74 @@ func newPanelClient(rawURL, token string) (*panelClient, error) {
  if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
   return nil, errors.New("PANEL_API_URL must be an HTTPS URL without credentials, query, or fragment")
  }
- if net.ParseIP(u.Hostname()) == nil && strings.ContainsAny(u.Hostname(), " \t\r\n") {
+ if net.ParseIP(u.Hostname()) == nil && strings.ContainsAny(u.Hostname(), " 	
+") {
   return nil, errors.New("panel hostname is invalid")
  }
  u.Path = strings.TrimRight(u.Path, "/")
  transport := http.DefaultTransport.(*http.Transport).Clone()
  transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
- client := &http.Client{
-  Transport: transport,
-  Timeout: 10 * time.Second,
-  CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse },
- }
+ client := &http.Client{Transport: transport, Timeout: 10 * time.Second,
+  CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}
  return &panelClient{baseURL: strings.TrimRight(u.String(), "/"), token: token, http: client}, nil
+}
+
+func (p *panelClient) postJSON(ctx context.Context, path string, payload any) ([]byte, int, error) {
+ encoded, err := json.Marshal(payload)
+ if err != nil { return nil, 0, fmt.Errorf("encode panel request: %w", err) }
+ req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.baseURL+path, bytes.NewReader(encoded))
+ if err != nil { return nil, 0, fmt.Errorf("build panel request: %w", err) }
+ req.Header.Set("Authorization", "Bearer "+p.token)
+ req.Header.Set("Content-Type", "application/json")
+ req.Header.Set("Accept", "application/json")
+ resp, err := p.http.Do(req)
+ if err != nil { return nil, 0, fmt.Errorf("panel request failed: %w", err) }
+ defer resp.Body.Close()
+ body, err := io.ReadAll(io.LimitReader(resp.Body, maxPanelResponseBytes+1))
+ if err != nil { return nil, resp.StatusCode, fmt.Errorf("read panel response: %w", err) }
+ if len(body) > maxPanelResponseBytes { return nil, resp.StatusCode, errors.New("panel response exceeds size limit") }
+ return body, resp.StatusCode, nil
 }
 
 // claim performs one bounded claim request. A nil response means the queue is empty.
 // The signed body remains untrusted until acceptSignedNodeJob authenticates it.
 func (p *panelClient) claim(ctx context.Context) (*claimResponse, []byte, error) {
- req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.baseURL+"/api/agent/jobs/claim", bytes.NewReader([]byte("{}")))
- if err != nil { return nil, nil, fmt.Errorf("build claim request: %w", err) }
- req.Header.Set("Authorization", "Bearer "+p.token)
- req.Header.Set("Content-Type", "application/json")
- req.Header.Set("Accept", "application/json")
- resp, err := p.http.Do(req)
- if err != nil { return nil, nil, fmt.Errorf("panel claim request failed: %w", err) }
- defer resp.Body.Close()
- if resp.StatusCode == http.StatusNoContent {
-  _, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1024))
-  return nil, nil, nil
- }
- body, err := io.ReadAll(io.LimitReader(resp.Body, maxPanelResponseBytes+1))
- if err != nil { return nil, nil, fmt.Errorf("read panel claim response: %w", err) }
- if len(body) > maxPanelResponseBytes { return nil, nil, errors.New("panel claim response exceeds size limit") }
- if resp.StatusCode != http.StatusOK { return nil, nil, fmt.Errorf("panel claim returned HTTP %d", resp.StatusCode) }
+ body, status, err := p.postJSON(ctx, "/api/agent/jobs/claim", map[string]any{})
+ if err != nil { return nil, nil, err }
+ if status == http.StatusNoContent { return nil, nil, nil }
+ if status != http.StatusOK { return nil, nil, fmt.Errorf("panel claim returned HTTP %d", status) }
  decoded, signedBody, err := decodeClaimResponse(body, time.Now().UTC())
  if err != nil { return nil, nil, fmt.Errorf("panel claim response rejected: %w", err) }
  return &decoded, signedBody, nil
+}
+
+func (p *panelClient) acknowledge(ctx context.Context, jobID, leaseToken string) error {
+ if !validJobID(jobID) || len(leaseToken) != 43 { return errors.New("invalid job acknowledgement parameters") }
+ _, status, err := p.postJSON(ctx, "/api/agent/jobs/"+url.PathEscape(jobID)+"/ack", leaseRequest{LeaseToken: leaseToken})
+ if err != nil { return err }
+ if status != http.StatusOK { return fmt.Errorf("panel acknowledgement returned HTTP %d", status) }
+ return nil
+}
+
+func (p *panelClient) renew(ctx context.Context, jobID, leaseToken string) (time.Time, error) {
+ if !validJobID(jobID) || len(leaseToken) != 43 { return time.Time{}, errors.New("invalid lease renewal parameters") }
+ body, status, err := p.postJSON(ctx, "/api/agent/jobs/"+url.PathEscape(jobID)+"/renew", leaseRequest{LeaseToken: leaseToken})
+ if err != nil { return time.Time{}, err }
+ if status != http.StatusOK { return time.Time{}, fmt.Errorf("panel lease renewal returned HTTP %d", status) }
+ var response leaseRenewal
+ if err := json.Unmarshal(body, &response); err != nil || !response.OK || response.LeaseExpiresAt.IsZero() {
+  return time.Time{}, errors.New("panel returned an invalid lease renewal response")
+ }
+ return response.LeaseExpiresAt, nil
+}
+
+func (p *panelClient) reportResult(ctx context.Context, jobID string, result jobResultRequest) error {
+ if !validJobID(jobID) || len(result.LeaseToken) != 43 || (result.Status != "SUCCEEDED" && result.Status != "FAILED") {
+  return errors.New("invalid job result parameters")
+ }
+ if result.Status == "FAILED" && result.ErrorCode == "" { return errors.New("failed job result requires an error code") }
+ _, status, err := p.postJSON(ctx, "/api/agent/jobs/"+url.PathEscape(jobID)+"/result", result)
+ if err != nil { return err }
+ if status != http.StatusOK { return fmt.Errorf("panel result submission returned HTTP %d", status) }
+ return nil
 }
