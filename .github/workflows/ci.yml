@@ -24,6 +24,7 @@ jobs:
     env:
       DATABASE_URL: postgresql://vampire:ci-password@localhost:5432/vampiredash
       SESSION_SECRET: ci-only-session-secret-at-least-32-characters
+      NODE_CREDENTIALS_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
