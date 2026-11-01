@@ -58,7 +58,7 @@ func TestInvalidSignatureDoesNotConsumeReplayKey(t *testing.T) {
 
 func TestOperationAndResultHashesMatchPanelCanonicalJSON(t *testing.T) {
  job := signedNodeJob{
-  ID: "job_identifier_1234", NodeID: "node-test",
+  ID: "job_identifier_1234", NodeID: "node-test", ServerID: "server-test",
   Nonce: "0123456789abcdef0123456789abcdef",
   Action: "UPDATE_PROPERTIES",
   Payload: []byte(`{"motd":"hello<&","maxPlayers":10}`),
@@ -66,7 +66,7 @@ func TestOperationAndResultHashesMatchPanelCanonicalJSON(t *testing.T) {
  identity, err := stableNodeJobIdentity(job)
  if err != nil { t.Fatal(err) }
  identityHash := sha256.Sum256(identity)
- if got := hex.EncodeToString(identityHash[:]); got != "8d68e61ff0fe5b7c25542d4ac8c1fd552ae9451fa4dd2f67f81ce3506b8fe2bd" {
+ if got := hex.EncodeToString(identityHash[:]); got != "94dc928d8d00f9f4df74195d30d1ca5bf74bd75fd3d87d8fd01f764eb1207eae" {
   t.Fatalf("identity hash=%s", got)
  }
  terminal := map[string]any{"status":"SUCCEEDED", "result":map[string]any{"motd":"hello<&"}}
