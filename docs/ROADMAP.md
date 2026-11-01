@@ -9,20 +9,24 @@
 - [x] Node-agent read-only host CPU, memory and data-filesystem capacity endpoint (mTLS + bearer token)
 
 ## Core platform
-- [x] Admin node registration, one-time bearer-token issuance, audit logging and disable endpoint (mTLS enrollment/rotation still pending)
+- [x] Admin node registration, one-time bearer-token issuance, audit logging and disable endpoint (automated mTLS enrollment/rotation pending)
 - [x] AES-256-GCM encrypted storage for node-agent bearer credentials
 - [x] Panel-side mTLS client for authenticated read-only node telemetry and admin health checks
 - [x] Scheduled node health polling with PostgreSQL advisory-lock coordination and transition-only audit events
 - [x] Node capacity reservation API with serialized overcommit checks, configurable overhead, expiry and idempotency
-- [ ] Automated node enrollment/rotation
-- [ ] Connect reservations to customer server creation and server lifecycle transitions
+- [ ] Automated node enrollment, credential rotation and revocation
 - [x] Durable idempotent server-operation queue schema for software and utility actions
-- [x] Owner and permission-scoped subuser operation request/history API (queue only; dispatch pending)
-- [x] Customer server creation API with active entitlement, slot/resource quota enforcement and healthy-node capacity selection (provisioning dispatch pending)
-- [x] Typed signed node-job envelope validation (no endpoint, replay store, lease or execution yet)
-- [x] Durable per-operation node-job outbox schema with unique nonce, bounded attempts, lease metadata and retry indexes\n- [ ] Persisted replay protection at agent, job lease worker and secure panel-to-agent dispatch
-- [ ] Operation worker, retries, cancellation and reconciliation
-- [ ] Docker provisioning with per-server isolation and strict resource limits
+- [x] Owner and permission-scoped subuser operation request/history API (execution pending)
+- [x] Customer server creation API with active entitlement, slot/resource quota enforcement and healthy-node capacity selection (provisioning pending)
+- [x] Typed signed node-job envelope validation with strict action payload schemas
+- [x] Durable per-operation node-job outbox with unique nonce, bounded attempts, lease metadata and retry indexes
+- [x] Node-authenticated job claim, acknowledgement, lease renewal and result API endpoints
+- [x] Bounded agent-job lease recovery with retry backoff and fail-closed handling after acknowledgement
+- [x] Agent-side HMAC envelope verification and fsync-backed persistent replay journal
+- [x] Go panel HTTPS client for claim/ack/renew/result with redirect blocking, bounded responses and optional private CA trust
+- [ ] Connect the panel client and replay journal to a crash-safe agent polling loop
+- [ ] Typed Docker runtime adapter with per-server isolation and strict cgroup resource limits
+- [ ] Operation execution, retries, cancellation and reconciliation
 - [ ] Server lifecycle state machine and reconciliation worker
 - [ ] Port allocation and firewall integration
 - [ ] WebSocket console with authorization and audit logging
@@ -30,7 +34,7 @@
 - [ ] Backup, restore and scheduled retention
 
 ## Customer and admin experience
-- [x] Owner-managed server subusers with granular permissions and audited access revocation (available to free server owners)
+- [x] Owner-managed server subusers with granular permissions and audited access revocation
 - [x] Customer server list view backed by server and entitlement APIs; detail view pending
 - [ ] Admin node, allocation, user and server management
 - [x] Database-backed plan catalogue and customer entitlement read APIs
