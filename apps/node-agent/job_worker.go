@@ -2,6 +2,9 @@ package main
 
 import (
  "context"
+ "crypto/sha256"
+ "encoding/hex"
+ "encoding/json"
  "errors"
  "fmt"
  "log"
@@ -65,10 +68,22 @@ func (p *nodeJobPoller) pollOnce(ctx context.Context) error {
  if err != nil || response == nil { return err }
  job, duplicate, err := acceptSignedNodeJob(signedBody, response.Signature, p.signingKey, p.nodeID, p.journalPath, time.Now().UTC())
  if err != nil { return fmt.Errorf("reject signed node job: %w", err) }
+ identity, err := stableNodeJobIdentity(job)
+ if err != nil { return fmt.Errorf("derive operation identity: %w", err) }
+ identitySum := sha256.Sum256(identity)
+ identityHash := hex.EncodeToString(identitySum[:])
+ operationPath := p.journalPath + ".operations.jsonl"
+ record := operationJournalRecord{JobID: job.ID, NodeID: job.NodeID, Nonce: job.Nonce, IdentityHash: identityHash, Stage: stageAccepted}
+ // A duplicate may be an old operation whose execution/result was interrupted.
+ // Re-ACK only; never execute it again without the future reconciliation protocol.
  if duplicate { return p.panel.acknowledge(ctx, job.ID, response.LeaseToken) }
- // If the process crashes after ACK but before execution, lease recovery
- // fails the operation closed instead of replaying a potentially unsafe side effect.
+ if err := advanceOperationJournal(operationPath, record); err != nil { return fmt.Errorf("persist accepted operation: %w", err) }
  if err := p.panel.acknowledge(ctx, job.ID, response.LeaseToken); err != nil { return fmt.Errorf("acknowledge accepted job: %w", err) }
+ record.Stage = stageAckConfirmed
+ if err := advanceOperationJournal(operationPath, record); err != nil { return fmt.Errorf("persist acknowledged operation: %w", err) }
+ record.Stage = stageExecutionStarted
+ if err := advanceOperationJournal(operationPath, record); err != nil { return fmt.Errorf("persist execution intent: %w", err) }
+
  result, executeErr := p.executeWithLeaseRenewal(ctx, job, response.LeaseToken)
  report := jobResultRequest{LeaseToken: response.LeaseToken, Status: "SUCCEEDED", Result: result}
  if executeErr != nil {
@@ -76,7 +91,23 @@ func (p *nodeJobPoller) pollOnce(ctx context.Context) error {
   report.ErrorCode = "EXECUTION_FAILED"
   report.ErrorMessage = boundedError(executeErr.Error(), 500)
  }
+ // Persist the exact terminal payload without the ephemeral lease credential.
+ terminal := struct {
+  Status string `json:"status"`
+  Result map[string]any `json:"result,omitempty"`
+  ErrorCode string `json:"errorCode,omitempty"`
+  ErrorMessage string `json:"errorMessage,omitempty"`
+ }{report.Status, report.Result, report.ErrorCode, report.ErrorMessage}
+ resultBytes, err := json.Marshal(terminal)
+ if err != nil { return fmt.Errorf("encode terminal operation result: %w", err) }
+ resultSum := sha256.Sum256(resultBytes)
+ record.Stage = stageResultPending
+ record.Result = resultBytes
+ record.ResultHash = hex.EncodeToString(resultSum[:])
+ if err := advanceOperationJournal(operationPath, record); err != nil { return fmt.Errorf("persist pending operation result: %w", err) }
  if err := p.panel.reportResult(ctx, job.ID, report); err != nil { return fmt.Errorf("report job result: %w", err) }
+ record.Stage = stageResultConfirmed
+ if err := advanceOperationJournal(operationPath, record); err != nil { return fmt.Errorf("persist confirmed operation result: %w", err) }
  if executeErr != nil { return fmt.Errorf("job %s execution failed: %w", job.ID, executeErr) }
  return nil
 }
