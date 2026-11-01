@@ -23,12 +23,13 @@ describe("node-agent reconciliation hashes", () => {
       id: "job_identifier_1234",
       nodeId: "node-test",
       nonce: "0123456789abcdef0123456789abcdef",
+      serverId: "server-test",
       operation: {
         type: "UPDATE_PROPERTIES",
         payload: { motd: "hello<&", maxPlayers: 10 },
       },
     });
-    assert.equal(hash, "8d68e61ff0fe5b7c25542d4ac8c1fd552ae9451fa4dd2f67f81ce3506b8fe2bd");
+    assert.equal(hash, "94dc928d8d00f9f4df74195d30d1ca5bf74bd75fd3d87d8fd01f764eb1207eae");
   });
 
   it("matches the Go agent terminal result hash encoding", () => {
