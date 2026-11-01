@@ -50,7 +50,7 @@ describe("server creation resource and port allocation", () => {
       },
     });
     const release = await prisma.minecraftSoftwareRelease.create({
-      data: { software: "PAPER", minecraftVersion: "1.21.1", softwareVersion: "1.21.1", javaMajor: 21, dockerImage: "itzg/minecraft-server:java21", enabled: true },
+      data: { software: "PAPER", minecraftVersion: "1.21.1", softwareVersion: "1.21.1", javaMajor: 21, dockerImage: "itzg/minecraft-server@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", enabled: true },
     });
     const headers = { cookie: `vd_session=${sessionToken}`, "content-type": "application/json" };
     try {
