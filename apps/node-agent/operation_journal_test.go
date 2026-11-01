@@ -165,3 +165,15 @@ func TestOperationJournalRecoveryReaderRejectsIncompleteHistory(t *testing.T) {
   t.Fatalf("expected incomplete history error, got %v", err)
  }
 }
+
+func TestOperationJournalRecoveryReaderHardensPermissions(t *testing.T) {
+ path := filepath.Join(t.TempDir(), "operations.jsonl")
+ record := operationTestRecord(stageAccepted)
+ encoded, err := json.Marshal(record)
+ if err != nil { t.Fatal(err) }
+ if err := os.WriteFile(path, append(encoded, '\n'), 0644); err != nil { t.Fatal(err) }
+ if _, err := latestOperationJournalRecords(path); err != nil { t.Fatal(err) }
+ info, err := os.Stat(path)
+ if err != nil { t.Fatal(err) }
+ if info.Mode().Perm() != 0600 { t.Fatalf("permissions=%o, want 600", info.Mode().Perm()) }
+}
