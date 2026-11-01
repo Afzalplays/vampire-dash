@@ -19,7 +19,8 @@
 - [x] Durable idempotent server-operation queue schema for software and utility actions
 - [x] Owner and permission-scoped subuser operation request/history API (queue only; dispatch pending)
 - [x] Customer server creation API with active entitlement, slot/resource quota enforcement and healthy-node capacity selection (provisioning dispatch pending)
-- [ ] Provisioning outbox dispatcher and secure node-agent job protocol
+- [x] Typed signed node-job envelope validation (no endpoint, replay store, lease or execution yet)
+- [ ] Persisted replay protection, job leases and secure panel-to-agent dispatch
 - [ ] Operation worker, retries, cancellation and reconciliation
 - [ ] Docker provisioning with per-server isolation and strict resource limits
 - [ ] Server lifecycle state machine and reconciliation worker

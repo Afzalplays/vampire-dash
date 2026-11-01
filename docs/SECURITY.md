@@ -13,7 +13,7 @@
 - Billing: signed raw-body webhook validation, server-side verification, idempotency and immutable ledger.
 - Nodes: authenticated agent identity, least privilege, resource limits and per-server filesystem isolation.
 - Files: canonicalize paths and reject traversal/symlink escapes; enforce upload limits.
-- Operations: audit admin actions and security-sensitive account changes.
+- Operations: audit admin actions and security-sensitive account changes.\n- Node jobs: validate signed, short-lived, node-bound typed envelopes; no raw shell, arbitrary URLs, Docker arguments or host paths. Dispatch remains disabled until persistent replay protection and leases exist.
 
 The starter is not production-ready. CSRF protection, MFA, OAuth, webhook handling,
 automated node enrollment, Docker isolation and security integration tests remain incomplete.
