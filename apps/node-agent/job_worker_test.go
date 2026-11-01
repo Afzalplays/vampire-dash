@@ -21,8 +21,9 @@ type fakeJobPanel struct {
  renewals int
  renewErr error
  results []jobResultRequest
+ claims int
 }
-func (f *fakeJobPanel) claim(context.Context) (*claimResponse, []byte, error) { return f.response, f.body, f.claimErr }
+func (f *fakeJobPanel) claim(context.Context) (*claimResponse, []byte, error) { f.claims++; return f.response, f.body, f.claimErr }
 func (f *fakeJobPanel) acknowledge(context.Context, string, string) error { f.acks++; return f.ackErr }
 func (f *fakeJobPanel) renew(context.Context, string, string) (time.Time, error) { f.renewals++; return time.Now().Add(time.Minute), f.renewErr }
 func (f *fakeJobPanel) reportResult(_ context.Context, _ string, result jobResultRequest) error { f.results = append(f.results, result); return f.resultErr }
@@ -143,5 +144,18 @@ func TestPollerPersistsAcceptanceButNotExecutionWhenAckFails(t *testing.T) {
  stages := readOperationJournalStages(t, p.journalPath+".operations.jsonl")
  if len(stages) != 1 || stages[0] != stageAccepted || executor.calls != 0 {
   t.Fatalf("stages=%v executor calls=%d", stages, executor.calls)
+ }
+}
+
+func TestPollerBlocksNewClaimsWhileAnOperationIsUnresolved(t *testing.T) {
+ panel, executor := &fakeJobPanel{}, &fakeJobExecutor{}
+ p := newTestPoller(panel, executor, t.TempDir())
+ unresolved := operationTestRecord(stageExecutionStarted)
+ if err := advanceOperationJournal(p.journalPath+".operations.jsonl", unresolved); err != nil { t.Fatal(err) }
+ if err := p.pollOnce(context.Background()); err == nil || !strings.Contains(err.Error(), "reconciliation is required") {
+  t.Fatalf("expected unresolved-operation block, got %v", err)
+ }
+ if panel.claims != 0 || executor.calls != 0 {
+  t.Fatalf("unsafe progress after unresolved operation: claims=%d executions=%d", panel.claims, executor.calls)
  }
 }
