@@ -239,6 +239,8 @@ model MinecraftNode {
   reservedDiskMb      Int              @default(0)
   memoryOverheadMb    Int              @default(1024)
   diskOverheadMb      Int              @default(1024)
+  allocationStart     Int              @default(25565)
+  allocationEnd       Int              @default(25664)
   healthStatus        String           @default("UNKNOWN")
   lastSeenAt          DateTime?
   agentVersion        String?
@@ -251,6 +253,7 @@ model MinecraftNode {
   servers             MinecraftServer[]
   reservations        NodeCapacityReservation[]
   agentJobs           NodeAgentJob[]
+  allocations         NodePortAllocation[]
 }
 model NodeCapacityReservation {
   id             String @id @default(cuid())
@@ -280,8 +283,22 @@ model MinecraftServer {
   owner      User         @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   node       MinecraftNode? @relation(fields: [nodeId], references: [id], onDelete: SetNull)
   operations MinecraftServerOperation[]
+  allocation NodePortAllocation?
   subusers   MinecraftServerSubuser[]
   @@index([ownerId, createdAt])
+}
+
+model NodePortAllocation {
+  id        String @id @default(cuid())
+  nodeId    String
+  serverId  String @unique
+  port      Int
+  protocol  String @default("TCP")
+  createdAt DateTime @default(now())
+  node      MinecraftNode @relation(fields: [nodeId], references: [id], onDelete: Restrict)
+  server    MinecraftServer @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  @@unique([nodeId, port, protocol])
+  @@index([nodeId, port])
 }
 
 model MinecraftSoftwareRelease {
