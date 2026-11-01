@@ -62,11 +62,11 @@ func TestPanelClientLeaseLifecycleRequests(t *testing.T) {
   seen = append(seen, r.URL.Path)
   switch {
   case strings.HasSuffix(r.URL.Path, "/ack"):
-   w.Header().Set("Content-Type", "application/json"); _, _ = w.Write([]byte(\`{"ok":true,"status":"ACKNOWLEDGED"}\`))
+   w.Header().Set("Content-Type", "application/json"); _, _ = w.Write([]byte(`{"ok":true,"status":"ACKNOWLEDGED"}`))
   case strings.HasSuffix(r.URL.Path, "/renew"):
    w.Header().Set("Content-Type", "application/json"); _ = json.NewEncoder(w).Encode(map[string]any{"ok":true,"leaseExpiresAt":expires.Format(time.RFC3339)})
   case strings.HasSuffix(r.URL.Path, "/result"):
-   w.Header().Set("Content-Type", "application/json"); _, _ = w.Write([]byte(\`{"ok":true,"status":"SUCCEEDED"}\`))
+   w.Header().Set("Content-Type", "application/json"); _, _ = w.Write([]byte(`{"ok":true,"status":"SUCCEEDED"}`))
   default: http.NotFound(w,r)
   }
  }))
