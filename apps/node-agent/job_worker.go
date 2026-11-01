@@ -78,8 +78,21 @@ func (p *nodeJobPoller) pollOnce(ctx context.Context) error {
  operationPath := p.journalPath + ".operations.jsonl"
  record := operationJournalRecord{JobID: job.ID, NodeID: job.NodeID, Nonce: job.Nonce, IdentityHash: identityHash, Stage: stageAccepted}
  // A duplicate may be an old operation whose execution/result was interrupted.
- // Re-ACK only; never execute it again without the future reconciliation protocol.
- if duplicate { return p.panel.acknowledge(ctx, job.ID, response.LeaseToken) }
+ // Ensure it is represented in the lifecycle journal, then re-ACK without execution.
+ if duplicate {
+  latest, readErr := latestOperationJournalRecords(operationPath)
+  if errors.Is(readErr, os.ErrNotExist) { latest = map[string]operationJournalRecord{} } else if readErr != nil {
+   return fmt.Errorf("inspect duplicate operation journal: %w", readErr)
+  }
+  if existing, ok := latest[job.ID]; ok {
+   if existing.IdentityHash != identityHash || existing.NodeID != job.NodeID || existing.Nonce != job.Nonce {
+    return errors.New("duplicate operation conflicts with durable lifecycle identity")
+   }
+  } else if err := advanceOperationJournal(operationPath, record); err != nil {
+   return fmt.Errorf("persist duplicate operation acceptance: %w", err)
+  }
+  return p.panel.acknowledge(ctx, job.ID, response.LeaseToken)
+ }
  if err := advanceOperationJournal(operationPath, record); err != nil { return fmt.Errorf("persist accepted operation: %w", err) }
  if err := p.panel.acknowledge(ctx, job.ID, response.LeaseToken); err != nil { return fmt.Errorf("acknowledge accepted job: %w", err) }
  record.Stage = stageAckConfirmed
