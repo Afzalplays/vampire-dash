@@ -22,11 +22,15 @@ type fakeJobPanel struct {
  renewErr error
  results []jobResultRequest
  claims int
+ reconcileCalls int
+ reconcileStatus string
+ reconcileErr error
 }
 func (f *fakeJobPanel) claim(context.Context) (*claimResponse, []byte, error) { f.claims++; return f.response, f.body, f.claimErr }
 func (f *fakeJobPanel) acknowledge(context.Context, string, string) error { f.acks++; return f.ackErr }
 func (f *fakeJobPanel) renew(context.Context, string, string) (time.Time, error) { f.renewals++; return time.Now().Add(time.Minute), f.renewErr }
 func (f *fakeJobPanel) reportResult(_ context.Context, _ string, result jobResultRequest) error { f.results = append(f.results, result); return f.resultErr }
+func (f *fakeJobPanel) reconcile(context.Context, string, string, string, string, map[string]any) (string, error) { f.reconcileCalls++; return f.reconcileStatus, f.reconcileErr }
 
 type fakeJobExecutor struct { calls int; err error }
 func (f *fakeJobExecutor) Execute(context.Context, signedNodeJob) (map[string]any, error) {
@@ -163,4 +167,48 @@ func TestPollerBlocksNewClaimsWhileAnOperationIsUnresolved(t *testing.T) {
  if panel.claims != 0 || executor.calls != 0 {
   t.Fatalf("unsafe progress after unresolved operation: claims=%d executions=%d", panel.claims, executor.calls)
  }
+}
+
+func TestPollerReconcilesPendingResultBeforeClaiming(t *testing.T) {
+ panel := &fakeJobPanel{reconcileStatus: "RESULT_ACCEPTED"}
+ executor := &fakeJobExecutor{}
+ p := newTestPoller(panel, executor, t.TempDir())
+ record := operationTestRecord(stageAccepted)
+ path := p.journalPath + ".operations.jsonl"
+ if err := advanceOperationJournal(path, record); err != nil { t.Fatal(err) }
+ record.Stage = stageAckConfirmed
+ if err := advanceOperationJournal(path, record); err != nil { t.Fatal(err) }
+ record.Stage = stageExecutionStarted
+ if err := advanceOperationJournal(path, record); err != nil { t.Fatal(err) }
+ record.Stage = stageResultPending
+ record.Result = json.RawMessage(`{"status":"SUCCEEDED","result":{"ok":true}}`)
+ record.ResultHash = replayHash(string(record.Result))
+ if err := advanceOperationJournal(path, record); err != nil { t.Fatal(err) }
+ if err := p.pollOnce(context.Background()); err != nil { t.Fatal(err) }
+ if panel.reconcileCalls != 1 || panel.claims != 1 || executor.calls != 0 {
+  t.Fatalf("unexpected recovery sequence: reconciles=%d claims=%d executions=%d", panel.reconcileCalls, panel.claims, executor.calls)
+ }
+ latest, err := latestOperationJournalRecords(path)
+ if err != nil { t.Fatal(err) }
+ if latest[record.JobID].Stage != stageResultConfirmed { t.Fatalf("stage=%s, want RESULT_CONFIRMED", latest[record.JobID].Stage) }
+}
+
+func TestPollerKeepsPendingResultBlockedWhenPanelIsNotReady(t *testing.T) {
+ panel := &fakeJobPanel{reconcileStatus: "IN_PROGRESS"}
+ p := newTestPoller(panel, &fakeJobExecutor{}, t.TempDir())
+ record := operationTestRecord(stageAccepted)
+ path := p.journalPath + ".operations.jsonl"
+ if err := advanceOperationJournal(path, record); err != nil { t.Fatal(err) }
+ record.Stage = stageAckConfirmed
+ if err := advanceOperationJournal(path, record); err != nil { t.Fatal(err) }
+ record.Stage = stageExecutionStarted
+ if err := advanceOperationJournal(path, record); err != nil { t.Fatal(err) }
+ record.Stage = stageResultPending
+ record.Result = json.RawMessage(`{"status":"SUCCEEDED"}`)
+ record.ResultHash = replayHash(string(record.Result))
+ if err := advanceOperationJournal(path, record); err != nil { t.Fatal(err) }
+ if err := p.pollOnce(context.Background()); err == nil || !strings.Contains(err.Error(), "IN_PROGRESS") {
+  t.Fatalf("expected pending reconciliation block, got %v", err)
+ }
+ if panel.claims != 0 { t.Fatalf("claimed new work while result pending: %d", panel.claims) }
 }
