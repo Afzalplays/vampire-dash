@@ -42,6 +42,9 @@ const terminalResultSchema = z.object({
   if (value.status === "FAILED" && !value.errorCode) {
     context.addIssue({ code: "custom", message: "Failed results require an error code" });
   }
+  if (value.status === "SUCCEEDED" && (value.errorCode || value.errorMessage)) {
+    context.addIssue({ code: "custom", message: "Successful results cannot contain failure details" });
+  }
 });
 
 const tokenDigest = (token: string) =>
@@ -205,8 +208,11 @@ export const agentJobRoutes: FastifyPluginAsync = async (app) => {
       }
     }).safeParse(request.body);
     if (!params.success || !body.success) return reply.code(400).send({ error: "Invalid operation reconciliation request" });
-    if (body.data.terminalResult && Buffer.byteLength(stableJson(body.data.terminalResult), "utf8") > 8192) {
+    if (body.data.terminalResult && Buffer.byteLength(stableJson(body.data.terminalResult), "utf8") > 16 * 1024) {
       return reply.code(400).send({ error: "Terminal result is too large" });
+    }
+    if (body.data.terminalResult?.result && Buffer.byteLength(stableJson(body.data.terminalResult.result), "utf8") > 8192) {
+      return reply.code(400).send({ error: "Terminal result payload is too large" });
     }
     if (body.data.terminalResult) {
       const computed = nodeAgentTerminalResultHash(body.data.terminalResult);
