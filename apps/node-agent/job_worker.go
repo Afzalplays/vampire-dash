@@ -18,6 +18,7 @@ type jobPanelAPI interface {
  acknowledge(context.Context, string, string) error
  renew(context.Context, string, string) (time.Time, error)
  reportResult(context.Context, string, jobResultRequest) error
+ reconcile(context.Context, string, string, string, string, map[string]any) (string, error)
 }
 
 // nodeJobExecutor must map allowlisted actions to fixed runtime operations.
@@ -65,7 +66,7 @@ func (p *nodeJobPoller) run(ctx context.Context) error {
 // pollOnce persists replay protection before ACK. An identical redelivery only
 // retries ACK and is never executed again.
 func (p *nodeJobPoller) pollOnce(ctx context.Context) error {
- if err := p.ensureNoUnresolvedOperations(); err != nil { return err }
+ if err := p.reconcileUnresolvedOperations(ctx); err != nil { return err }
  response, signedBody, err := p.panel.claim(ctx)
  if err != nil || response == nil { return err }
  job, duplicate, err := acceptSignedNodeJob(signedBody, response.Signature, p.signingKey, p.nodeID, p.journalPath, time.Now().UTC())
@@ -113,13 +114,28 @@ func (p *nodeJobPoller) pollOnce(ctx context.Context) error {
 }
 
 
-func (p *nodeJobPoller) ensureNoUnresolvedOperations() error {
- latest, err := latestOperationJournalRecords(p.journalPath + ".operations.jsonl")
+func (p *nodeJobPoller) reconcileUnresolvedOperations(ctx context.Context) error {
+ operationPath := p.journalPath + ".operations.jsonl"
+ latest, err := latestOperationJournalRecords(operationPath)
  if errors.Is(err, os.ErrNotExist) { return nil }
  if err != nil { return fmt.Errorf("inspect operation recovery journal: %w", err) }
  for jobID, record := range latest {
-  if record.Stage != stageResultConfirmed {
-   return fmt.Errorf("operation %s remains %s; reconciliation is required before claiming more work", jobID, record.Stage)
+  if record.Stage == stageResultConfirmed { continue }
+  if record.Stage != stageResultPending {
+   return fmt.Errorf("operation %s remains %s; automatic replay is disabled and operator reconciliation is required", jobID, record.Stage)
+  }
+  var terminal map[string]any
+  if err := json.Unmarshal(record.Result, &terminal); err != nil {
+   return fmt.Errorf("decode pending result for operation %s: %w", jobID, err)
+  }
+  status, err := p.panel.reconcile(ctx, jobID, record.IdentityHash, string(stageResultPending), record.ResultHash, terminal)
+  if err != nil { return fmt.Errorf("reconcile pending result for operation %s: %w", jobID, err) }
+  if status != "RESULT_ACCEPTED" && status != "RESULT_COMMITTED" {
+   return fmt.Errorf("operation %s remains unresolved (%s); refusing to claim new work", jobID, status)
+  }
+  record.Stage = stageResultConfirmed
+  if err := advanceOperationJournal(operationPath, record); err != nil {
+   return fmt.Errorf("persist reconciled result for operation %s: %w", jobID, err)
   }
  }
  return nil
