@@ -57,6 +57,7 @@ enum MinecraftSoftwareType {
 }
 
 enum ServerOperationType {
+  PROVISION_SERVER
   INSTALL_PLUGIN
   INSTALL_MOD
   INSTALL_MODPACK
