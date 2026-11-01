@@ -325,6 +325,55 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     if (!released) return reply.code(404).send({ error: "Active reservation not found" });
     return { ok: true, status: "RELEASED" };
   });
+  app.post("/nodes/:nodeId/rotate-credentials", { config: { rateLimit: { max: 5, timeWindow: "1 hour" } } }, async (request, reply) => {
+    const admin = await requireAdmin(request, reply); if (!admin) return;
+    const params = z.object({ nodeId: z.string().min(1).max(128) }).safeParse(request.params);
+    if (!params.success) return reply.code(400).send({ error: "Invalid node ID" });
+    if (!env.NODE_CREDENTIALS_KEY) return reply.code(503).send({ error: "Node credential encryption is not configured" });
+
+    const existing = await prisma.minecraftNode.findUnique({
+      where: { id: params.data.nodeId },
+      select: { id: true, name: true },
+    });
+    if (!existing) return reply.code(404).send({ error: "Node not found" });
+
+    // Rotate atomically: the previous bearer token is revoked immediately.
+    // Keep the node disabled until its agent has been updated with the new token.
+    const token = randomBytes(32).toString("base64url");
+    const encrypted = encryptNodeCredential(token);
+    const node = await prisma.$transaction(async (tx) => {
+      const updated = await tx.minecraftNode.update({
+        where: { id: existing.id },
+        data: {
+          tokenHash: nodeTokenDigest(token),
+          tokenCiphertext: encrypted.ciphertext,
+          tokenNonce: encrypted.nonce,
+          tokenAuthTag: encrypted.authTag,
+          enabled: false,
+          healthStatus: "UNKNOWN",
+          lastSeenAt: null,
+          lastHealthError: "Node credential rotated; update the agent token and re-check node health",
+        },
+        select: { id: true, name: true, enabled: true, healthStatus: true },
+      });
+      await tx.auditLog.create({
+        data: {
+          actorUserId: admin.id,
+          action: "NODE_CREDENTIAL_ROTATED",
+          targetId: existing.id,
+          details: `Rotated bearer credential for node ${existing.name}; node disabled pending agent reconfiguration`,
+        },
+      });
+      return updated;
+    });
+
+    return reply.code(200).send({
+      node,
+      agentToken: token,
+      warning: "The previous token is revoked. Copy this token now, update the node agent, then run a health check and re-enable the node.",
+    });
+  });
+
   app.post("/nodes/:nodeId/disable", async (request, reply) => {
     const admin = await requireAdmin(request, reply); if (!admin) return;
     const params = z.object({ nodeId: z.string().min(1).max(128) }).safeParse(request.params);
