@@ -41,10 +41,6 @@ func newPanelClient(rawURL, token string) (*panelClient, error) {
  if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
   return nil, errors.New("PANEL_API_URL must be an HTTPS URL without credentials, query, or fragment")
  }
- if net.ParseIP(u.Hostname()) == nil && strings.ContainsAny(u.Hostname(), " 	
-") {
-  return nil, errors.New("panel hostname is invalid")
- }
  u.Path = strings.TrimRight(u.Path, "/")
  transport := http.DefaultTransport.(*http.Transport).Clone()
  transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
