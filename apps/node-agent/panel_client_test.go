@@ -4,6 +4,7 @@ import (
  "context"
  "crypto/tls"
  "encoding/json"
+ "encoding/pem"
  "net/http"
  "net/http/httptest"
  "os"
@@ -90,11 +91,9 @@ func TestPanelClientSupportsAdditionalTrustedCA(t *testing.T) {
  server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) }))
  defer server.Close()
  cert := server.Certificate()
- pem := `-----BEGIN CERTIFICATE-----
-` + encodeCertificatePEM(cert.Raw) + `-----END CERTIFICATE-----
-`
+ certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw})
  caFile := t.TempDir()+"/panel-ca.pem"
- if err := os.WriteFile(caFile, []byte(pem), 0600); err != nil { t.Fatal(err) }
+ if err := os.WriteFile(caFile, certPEM, 0600); err != nil { t.Fatal(err) }
  client, err := newPanelClientWithCA(server.URL, testAgentToken, caFile)
  if err != nil { t.Fatal(err) }
  _, status, err := client.postJSON(context.Background(), "/health", map[string]any{})
