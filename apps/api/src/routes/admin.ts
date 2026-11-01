@@ -17,7 +17,9 @@ const nodeCreateSchema = z.object({
   }, "Node endpoint must be an HTTPS URL without credentials, query, or fragment"),
   memoryMb: z.number().int().positive().max(4_194_304),
   diskMb: z.number().int().positive().max(16_777_216),
-});
+  allocationStart: z.number().int().min(1024).max(65535).default(25565),
+  allocationEnd: z.number().int().min(1024).max(65535).default(25664),
+}).refine((value) => value.allocationStart <= value.allocationEnd && value.allocationEnd - value.allocationStart <= 4095, "Allocation range must be ordered and contain at most 4096 ports");
 const nodeTokenDigest = (token: string) => createHmac("sha256", env.SESSION_SECRET).update(token, "utf8").digest("hex");
 
 export const adminRoutes: FastifyPluginAsync = async (app) => {
