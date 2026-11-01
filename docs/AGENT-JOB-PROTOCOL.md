@@ -12,9 +12,9 @@ The Go panel HTTPS client supports bounded claim, acknowledgement, renewal and r
 
 A testable polling state machine now connects the panel client contract, signature validation, durable replay journal, acknowledgement, bounded result reporting and periodic lease renewal while an executor runs. It refuses to start without a concrete executor and a bounded renewal interval. It ACKs only after the replay record is fsynced; identical redelivery retries ACK without re-executing. Renewal failure cancels the executor context and is reported as a failed operation. The poller is not wired into agent startup, and no production executor exists yet.
 
-The stable replay identity issue is resolved. One important delivery gap remains: a process failure after ACK but before result reporting needs durable pending-result recovery and a server-side reconciliation path. Until then, acknowledged jobs whose result cannot be reported fail closed; they are never automatically re-executed. Long-running operations also require active lease renewal.
+Acknowledged-job recovery is partially implemented: durable operation checkpoints, pending-result reconciliation, server-derived operation identity, and database integration tests cover accepted results, idempotent duplicate reconciliation, identity conflicts, and live acknowledged leases. The immutable identity now includes the panel-owned server ID, node ID, job ID, nonce, action, and canonical payload. Administrator tooling exposes uncertain jobs read-only; node credential rotation disables the node until reconfiguration and health verification.
 
-The agent currently exposes read-only health and capacity telemetry. It has no Docker runtime adapter or production server-operation execution. Customer operations must remain undispatched. The detailed recovery contract is documented in [ACKNOWLEDGED-JOB-RECOVERY-DESIGN.md](./ACKNOWLEDGED-JOB-RECOVERY-DESIGN.md); it is a design specification, not an implemented capability.
+The agent currently exposes read-only health and capacity telemetry. It has no Docker runtime adapter or production server-operation execution. Customer operations must remain undispatched. The recovery implementation and remaining rollout gates are documented in [ACKNOWLEDGED-JOB-RECOVERY-DESIGN.md](./ACKNOWLEDGED-JOB-RECOVERY-DESIGN.md).
 
 ## Envelope
 
@@ -28,7 +28,7 @@ The panel-to-agent job envelope contains:
 - `action`: allowlisted typed action
 - `payload`: action-specific JSON object
 
-The exact raw body is authenticated with HMAC-SHA-256 as `sha256=<hex>`. Transport additionally requires mutually authenticated TLS. The HMAC key is unique per node, at least 256 bits, and never shared between nodes. The agent rejects unknown envelope and payload fields, oversized bodies, stale timestamps, wrong node IDs and unknown actions.
+The exact raw body is authenticated with HMAC-SHA-256 as `sha256=<hex>`. Transport additionally requires mutually authenticated TLS. The HMAC key is unique per node, at least 256 bits, and never shared between nodes. The agent rejects unknown envelope and payload fields, oversized bodies, stale timestamps, wrong node IDs, missing server IDs and unknown actions.
 
 ## Initial action allowlist
 
@@ -39,10 +39,9 @@ Raw shell strings, arbitrary URLs, Docker arguments, host paths, environment-var
 
 ## Required before enabling dispatch
 
-1. Implement the durable monotonic agent journal and node-authenticated result reconciliation contract in [ACKNOWLEDGED-JOB-RECOVERY-DESIGN.md](./ACKNOWLEDGED-JOB-RECOVERY-DESIGN.md); keep uncertain operations fail-closed and never replay an acknowledged side effect.
-2. Add integration tests for ACK timeouts, crash points, re-leases, duplicate delivery, clock skew, expired leases and partial failures.
+1. Add route-level database integration tests for credential rotation and additional reconciliation failure/isolation cases; retain mandatory mTLS certificate verification and per-node HMAC keys.
+2. Add fault-injection tests for ACK timeouts, process crash points, re-leases, duplicate delivery, clock skew, expired leases and partial runtime failures.
 3. Wire the poller's tested lease-renewal loop into production startup only after a real executor exists; add timing and failure-injection integration tests.
-4. Add route-level database integration tests for reconciliation and credential rotation; retain mandatory mTLS certificate verification and per-node HMAC keys.
 5. Implement a typed Docker runtime adapter that resolves the signed server ID through a panel-owned server/container mapping and maps allowlisted actions to fixed container APIs; never invoke a shell or accept user-controlled container identifiers/options.
 6. Enforce server-to-node ownership, per-server resource boundaries, rate limits and audit events before dispatch.
 7. Wire the polling loop into startup only after the runtime adapter and all preceding safety gates pass.
