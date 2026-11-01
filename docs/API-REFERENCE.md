@@ -16,6 +16,12 @@ Base path: `/api`.
 
 Email event templates are documented in [EMAIL-NOTIFICATIONS.md](EMAIL-NOTIFICATIONS.md). SMTP credentials must remain in the API environment.
 
+## Customer servers
+- `GET /servers` — list servers owned by the signed-in user or shared with them as a subuser.
+- `GET /servers/:serverId` — retrieve an authorized server detail, node health summary, access role and permissions.
+
+Server responses never expose node-agent credentials or the node's private agent endpoint. Subusers only see servers shared with their account.
+
 ## Minecraft software catalogue
 - `GET /software/releases` — list enabled releases; optional filters: `software` and `minecraftVersion`.
 - `POST /admin/software/releases` — admin-only curated release registration. Body includes `software`, `minecraftVersion`, `softwareVersion`, `javaMajor`, `dockerImage`, optional `downloadUrl`, `checksumSha256`, `recommended` and `enabled`.
@@ -35,13 +41,16 @@ All admin endpoints require an authenticated ADMIN session. Capacity reservation
 ## Plugin, mod and modpack catalogue
 - `GET /artifacts` — list enabled projects and enabled versioned files; optional filters: `kind`, `software`, `minecraftVersion`, `loader`.
 - `POST /admin/artifacts/projects` — admin-only project registration from Modrinth or CurseForge with compatibility, source and license metadata.
-- `POST /admin/artifacts/projects/:projectId/files` — admin-only version/file registration with provider CDN host validation and optional SHA-256/size metadata.\n- `GET /admin/artifacts/projects` — admin-only full catalogue review, including disabled projects and files.\n- `PATCH /admin/artifacts/projects/:projectId` — enable or disable a curated project.\n- `PATCH /admin/artifacts/files/:fileId` — enable or disable an individual pinned file.
+- `POST /admin/artifacts/projects/:projectId/files` — admin-only version/file registration with provider CDN host validation and optional SHA-256/size metadata.
+- `GET /admin/artifacts/projects` — admin-only full catalogue review, including disabled projects and files.
+- `PATCH /admin/artifacts/projects/:projectId` — enable or disable a curated project.
+- `PATCH /admin/artifacts/files/:fileId` — enable or disable an individual pinned file.
 
 Catalogue records default to disabled. These endpoints store metadata only; they do not download or install artifacts.
 
-## Server operations (queue foundation)
-- `POST /servers/:serverId/operations` — owner-only, idempotent queue request for `START`, `STOP`, `RESTART`, or allowlisted `UPDATE_PROPERTIES`. Returns HTTP 202 with `execution: "NOT_DISPATCHED"`.
-- `GET /servers/:serverId/operations` — owner-only operation history (latest 50).
+## Server operations
+- `POST /servers/:serverId/operations` — owner or permission-scoped subuser queues idempotent `START`, `STOP`, `RESTART`, or allowlisted `UPDATE_PROPERTIES`. Returns HTTP 202 with `execution: "NOT_DISPATCHED"`.
+- `GET /servers/:serverId/operations` — owner or subuser with `viewConsole` permission reads the latest 50 operations.
 
 Operation requests are persisted and audited, but are not executed yet. Only allowlisted server properties are accepted; arbitrary file paths, shell commands, URLs and container arguments are rejected. A node-agent dispatcher/worker must be deployed before these requests can change a running server.
 

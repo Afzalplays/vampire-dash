@@ -15,6 +15,7 @@ import { softwareRoutes } from "./routes/software.js";
 import { artifactRoutes } from "./routes/artifacts.js";
 import { operationRoutes } from "./routes/operations.js";
 import { subuserRoutes } from "./routes/subusers.js";
+import { serverRoutes } from "./routes/servers.js";
 
 const app = Fastify({ logger: true, trustProxy: false, bodyLimit: 1024 * 1024 });
 await app.register(helmet);
@@ -32,6 +33,7 @@ await app.register(softwareRoutes, { prefix: "/api/software" });
 await app.register(artifactRoutes, { prefix: "/api/artifacts" });
 await app.register(operationRoutes, { prefix: "/api/servers" });
 await app.register(subuserRoutes, { prefix: "/api/servers" });
+await app.register(serverRoutes, { prefix: "/api/servers" });
 
 app.setErrorHandler((error, request, reply) => {
   request.log.error(error);
