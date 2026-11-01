@@ -403,6 +403,7 @@ model NodeAgentJob {
   availableAt    DateTime @default(now())
   leaseTokenHash String?
   leaseExpiresAt DateTime?
+  resultRequestHash String?
   lastErrorCode  String?
   lastError      String?
   createdAt      DateTime @default(now())

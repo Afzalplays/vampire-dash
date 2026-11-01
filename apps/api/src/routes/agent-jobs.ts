@@ -24,6 +24,13 @@ function validateClaimedPayload(action: string, payload: unknown): boolean {
   return false;
 }
 
+const stableJson = (value: unknown): string => {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableJson(record[key])}`).join(",")}}`;
+};
+
 const tokenDigest = (token: string) =>
   createHmac("sha256", env.SESSION_SECRET).update(token, "utf8").digest("hex");
 
@@ -120,16 +127,27 @@ export const agentJobRoutes: FastifyPluginAsync = async (app) => {
     if (body.data.result && Buffer.byteLength(JSON.stringify(body.data.result), "utf8") > 8192) return reply.code(400).send({ error: "Result payload is too large" });
     if (body.data.status === "FAILED" && !body.data.errorCode) return reply.code(400).send({ error: "Failed jobs require an error code" });
     const supplied = createHash("sha256").update(body.data.leaseToken).digest();
+    const requestHash = createHash("sha256").update(stableJson(body.data), "utf8").digest("hex");
     const outcome = await prisma.$transaction(async (tx) => {
-      const job = await tx.nodeAgentJob.findFirst({ where: { id: params.data.jobId, nodeId: node.id }, select: { id: true, status: true, leaseTokenHash: true, leaseExpiresAt: true, operationId: true } });
-      if (!job || job.status !== "ACKNOWLEDGED" || !job.leaseTokenHash || !job.leaseExpiresAt) return "NOT_FOUND";
+      const job = await tx.nodeAgentJob.findFirst({
+        where: { id: params.data.jobId, nodeId: node.id },
+        select: {
+          id: true, status: true, leaseTokenHash: true, leaseExpiresAt: true,
+          operationId: true, resultRequestHash: true,
+        },
+      });
+      if (!job) return "NOT_FOUND";
+      if (job.status === "SUCCEEDED" || job.status === "FAILED") {
+        return job.resultRequestHash === requestHash ? job.status : "RESULT_CONFLICT";
+      }
+      if (job.status !== "ACKNOWLEDGED" || !job.leaseTokenHash || !job.leaseExpiresAt) return "NOT_FOUND";
       const stored = Buffer.from(job.leaseTokenHash, "hex");
       if (stored.length !== supplied.length || !timingSafeEqual(stored, supplied)) return "INVALID_LEASE";
       const now = new Date();
       if (job.leaseExpiresAt <= now) return "EXPIRED";
       const updated = await tx.nodeAgentJob.updateMany({
         where: { id: job.id, nodeId: node.id, status: "ACKNOWLEDGED", leaseTokenHash: job.leaseTokenHash, leaseExpiresAt: { gt: now } },
-        data: { status: body.data.status, leaseTokenHash: null, leaseExpiresAt: null, lastErrorCode: body.data.status === "FAILED" ? body.data.errorCode : null, lastError: body.data.status === "FAILED" ? body.data.errorMessage ?? "Node agent reported operation failure" : null },
+        data: { status: body.data.status, leaseTokenHash: null, leaseExpiresAt: null, resultRequestHash: requestHash, lastErrorCode: body.data.status === "FAILED" ? body.data.errorCode : null, lastError: body.data.status === "FAILED" ? body.data.errorMessage ?? "Node agent reported operation failure" : null },
       });
       if (updated.count !== 1) return "CONFLICT";
       await tx.minecraftServerOperation.updateMany({
@@ -143,7 +161,7 @@ export const agentJobRoutes: FastifyPluginAsync = async (app) => {
     if (outcome === "NOT_FOUND") return reply.code(404).send({ error: "Acknowledged job not found" });
     if (outcome === "INVALID_LEASE") return reply.code(401).send({ error: "Lease token is invalid" });
     if (outcome === "EXPIRED") return reply.code(409).send({ error: "Lease has expired" });
-    if (outcome === "CONFLICT") return reply.code(409).send({ error: "Job state changed" });
+    if (outcome === "CONFLICT" || outcome === "RESULT_CONFLICT") return reply.code(409).send({ error: "Job state changed or result does not match the original submission" });
     return { ok: true, status: outcome };
   });
 
