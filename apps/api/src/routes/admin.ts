@@ -192,7 +192,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
   app.get("/nodes", async (request, reply) => {
     const admin = await requireAdmin(request, reply); if (!admin) return;
     const nodes = await prisma.minecraftNode.findMany({
-      select: { id: true, name: true, location: true, endpoint: true, enabled: true, memoryMb: true, diskMb: true, reservedMemoryMb: true, reservedDiskMb: true, memoryOverheadMb: true, diskOverheadMb: true, healthStatus: true, lastSeenAt: true, agentVersion: true, cpuCores: true, memoryAvailableMb: true, diskAvailableMb: true, metricsSampledAt: true, lastHealthError: true, createdAt: true, _count: { select: { servers: true, reservations: true } } },
+      select: { id: true, name: true, location: true, endpoint: true, enabled: true, memoryMb: true, diskMb: true, reservedMemoryMb: true, reservedDiskMb: true, memoryOverheadMb: true, diskOverheadMb: true, allocationStart: true, allocationEnd: true, healthStatus: true, lastSeenAt: true, agentVersion: true, cpuCores: true, memoryAvailableMb: true, diskAvailableMb: true, metricsSampledAt: true, lastHealthError: true, createdAt: true, _count: { select: { servers: true, reservations: true, allocations: true } } },
       orderBy: { createdAt: "desc" },
     });
     return { nodes };
@@ -210,9 +210,9 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     const node = await prisma.minecraftNode.create({ data: {
       ...parsed.data, endpoint, tokenHash: nodeTokenDigest(token),
       tokenCiphertext: encrypted.ciphertext, tokenNonce: encrypted.nonce, tokenAuthTag: encrypted.authTag, enabled: false,
-    }, select: { id: true, name: true, location: true, endpoint: true, enabled: true, memoryMb: true, diskMb: true, createdAt: true } });
+    }, select: { id: true, name: true, location: true, endpoint: true, enabled: true, memoryMb: true, diskMb: true, allocationStart: true, allocationEnd: true, createdAt: true } });
     await prisma.auditLog.create({ data: { actorUserId: admin.id, action: "NODE_REGISTERED", targetId: node.id, details: `Registered node ${node.name} at ${node.endpoint}; disabled pending secure agent enrollment` } });
-    return reply.code(201).send({ node, agentToken: token, warning: "Copy this token now. It will not be shown again. Node remains disabled until mTLS enrollment is implemented." });
+    return reply.code(201).send({ node, agentToken: token, warning: "Copy this token now. It will not be shown again. Install the node agent with the matching token and mTLS certificates, run a successful health check, then explicitly enable the node." });
   });
   app.post("/nodes/:nodeId/check", { config: { rateLimit: { max: 12, timeWindow: "1 minute" } } }, async (request, reply) => {
     const admin = await requireAdmin(request, reply); if (!admin) return;
