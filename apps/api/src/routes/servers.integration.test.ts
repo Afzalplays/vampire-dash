@@ -43,7 +43,7 @@ describe("server creation resource and port allocation", () => {
     });
     const node = await prisma.minecraftNode.create({
       data: {
-        name: `server-create-node-${suffix}`, location: "ci", endpoint: `https://server-create-${suffix}.example.test`,
+        name: `server-create-node-${suffix}`, location: "ci", endpoint: `https://server-create-${suffix}.example.test`, minecraftAddress: `mc-${suffix}.example.test`,
         tokenHash: digest(token()), enabled: true, healthStatus: "ONLINE", lastSeenAt: new Date(),
         memoryMb: 8192, diskMb: 81920, cpuCores: 8, memoryOverheadMb: 1024, diskOverheadMb: 1024,
         allocationStart: 25565, allocationEnd: 25566,
@@ -57,6 +57,7 @@ describe("server creation resource and port allocation", () => {
       const first = await app.inject({ method: "POST", url: "/api/servers", headers, payload: { entitlementId: entitlement.id, name: "CI Server One", software: "PAPER", version: "1.21.1" } });
       assert.equal(first.statusCode, 202, first.body);
       assert.equal(first.json().server.allocation.port, 25565);
+      assert.equal(first.json().server.node.minecraftAddress, `mc-${suffix}.example.test`);
       const firstOperation = await prisma.minecraftServerOperation.findFirstOrThrow({ where: { serverId: first.json().server.id, type: "PROVISION_SERVER" }, include: { agentJob: true } });
       assert.equal(firstOperation.status, "QUEUED");
       assert.equal(firstOperation.agentJob?.nodeId, node.id);
