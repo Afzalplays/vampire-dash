@@ -212,3 +212,18 @@ func TestPollerKeepsPendingResultBlockedWhenPanelIsNotReady(t *testing.T) {
  }
  if panel.claims != 0 { t.Fatalf("claimed new work while result pending: %d", panel.claims) }
 }
+
+func TestPollerJournalsLegacyDuplicateBeforeReAck(t *testing.T) {
+ response, body := testPollerJob(t, "START")
+ panel, executor := &fakeJobPanel{response: response, body: body}, &fakeJobExecutor{}
+ p := newTestPoller(panel, executor, t.TempDir())
+ _, duplicate, err := acceptSignedNodeJob(body, response.Signature, p.signingKey, p.nodeID, p.journalPath, time.Now().UTC())
+ if err != nil || duplicate { t.Fatalf("seed replay journal duplicate=%v err=%v", duplicate, err) }
+ if err := p.pollOnce(context.Background()); err != nil { t.Fatal(err) }
+ if executor.calls != 0 || panel.acks != 1 { t.Fatalf("duplicate executed: calls=%d acks=%d", executor.calls, panel.acks) }
+ stages := readOperationJournalStages(t, p.journalPath+".operations.jsonl")
+ if len(stages) != 1 || stages[0] != stageAccepted { t.Fatalf("legacy duplicate stages=%v", stages) }
+ if err := p.pollOnce(context.Background()); err == nil || !strings.Contains(err.Error(), "operator reconciliation is required") {
+  t.Fatalf("expected unresolved duplicate to block future claims, got %v", err)
+ }
+}
