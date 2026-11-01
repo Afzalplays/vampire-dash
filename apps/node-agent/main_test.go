@@ -65,3 +65,54 @@ func TestMetricsUnavailableForInvalidDataDirectory(t *testing.T) {
  w:=httptest.NewRecorder(); h.ServeHTTP(w,r)
  if w.Code!=http.StatusServiceUnavailable { t.Fatalf("want 503, got %d",w.Code) }
 }
+
+func setAgentConfigEnv(t *testing.T) {
+ t.Helper()
+ t.Setenv("AGENT_LISTEN","127.0.0.1:8081")
+ t.Setenv("AGENT_NODE_ID","node-test")
+ t.Setenv("AGENT_TOKEN",testAgentToken)
+ t.Setenv("AGENT_TLS_CERT","/tmp/agent.crt")
+ t.Setenv("AGENT_TLS_KEY","/tmp/agent.key")
+ t.Setenv("AGENT_CLIENT_CA","/tmp/panel-ca.crt")
+ t.Setenv("AGENT_DATA_DIR","/var/lib/vampire-agent")
+ t.Setenv("AGENT_ENABLE_JOB_EXECUTION","false")
+ t.Setenv("PANEL_API_URL","")
+ t.Setenv("AGENT_DOCKER_SOCKET","")
+ t.Setenv("AGENT_JOB_POLL_SECONDS","")
+ t.Setenv("AGENT_LEASE_RENEW_SECONDS","")
+}
+
+func TestLoadConfigKeepsJobExecutionDisabledByDefault(t *testing.T) {
+ setAgentConfigEnv(t)
+ t.Setenv("AGENT_ENABLE_JOB_EXECUTION","")
+ c, err := loadConfig()
+ if err != nil { t.Fatal(err) }
+ if c.EnableJobExecution { t.Fatal("job execution must remain opt-in") }
+}
+
+func TestLoadConfigEnablesJobsOnlyWithHTTPSAndPersistentDataDirectory(t *testing.T) {
+ setAgentConfigEnv(t)
+ t.Setenv("AGENT_ENABLE_JOB_EXECUTION","true")
+ t.Setenv("PANEL_API_URL","https://panel.example.test")
+ t.Setenv("AGENT_JOB_POLL_SECONDS","7")
+ t.Setenv("AGENT_LEASE_RENEW_SECONDS","15")
+ c, err := loadConfig()
+ if err != nil { t.Fatal(err) }
+ if !c.EnableJobExecution || c.DockerSocket != "/var/run/docker.sock" || c.JobPollInterval != 7*time.Second || c.LeaseRenewInterval != 15*time.Second { t.Fatalf("unexpected worker config: %+v",c) }
+}
+
+func TestLoadConfigRejectsUnsafeJobWorkerConfiguration(t *testing.T) {
+ cases := []struct{name string; panelURL string; dataDir string; poll string}{
+  {"plaintext panel URL","http://panel.example.test","/var/lib/vampire-agent","5"},
+  {"root data directory","https://panel.example.test","/","5"},
+  {"invalid poll interval","https://panel.example.test","/var/lib/vampire-agent","0"},
+ }
+ for _, tc := range cases { t.Run(tc.name,func(t *testing.T) {
+  setAgentConfigEnv(t)
+  t.Setenv("AGENT_ENABLE_JOB_EXECUTION","true")
+  t.Setenv("PANEL_API_URL",tc.panelURL)
+  t.Setenv("AGENT_DATA_DIR",tc.dataDir)
+  t.Setenv("AGENT_JOB_POLL_SECONDS",tc.poll)
+  if _,err:=loadConfig(); err==nil { t.Fatal("expected unsafe configuration rejection") }
+ }) }
+}
