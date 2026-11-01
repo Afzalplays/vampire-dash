@@ -105,6 +105,7 @@ describe("agent reconciliation route database integration", () => {
       assert.equal(committedJob.resultRequestHash, resultHash);
       assert.equal(committedOperation.status, "SUCCEEDED");
       assert.deepEqual(committedOperation.result, terminalResult.result);
+      assert.equal((await prisma.minecraftServer.findUniqueOrThrow({ where: { id: server.id } })).status, "RUNNING");
 
       const duplicate = await app.inject({ method: "POST", url, headers, payload: body });
       assert.equal(duplicate.statusCode, 200, duplicate.body);
