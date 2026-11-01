@@ -6,6 +6,7 @@ import (
  "encoding/json"
  "net/http"
  "net/http/httptest"
+ "os"
  "strings"
  "testing"
  "time"
@@ -83,4 +84,25 @@ func TestPanelClientRejectsInvalidResultBeforeNetwork(t *testing.T) {
  client, err := newPanelClient("https://panel.example", testAgentToken); if err != nil { t.Fatal(err) }
  if err := client.reportResult(context.Background(), "job_123456789012", jobResultRequest{LeaseToken:testLeaseToken,Status:"FAILED"}); err == nil { t.Fatal("failed result without error code must be rejected") }
  if err := client.acknowledge(context.Background(), "../escape", testLeaseToken); err == nil { t.Fatal("invalid job id must be rejected") }
+}
+
+func TestPanelClientSupportsAdditionalTrustedCA(t *testing.T) {
+ server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) }))
+ defer server.Close()
+ cert := server.Certificate()
+ pem := `-----BEGIN CERTIFICATE-----
+` + encodeCertificatePEM(cert.Raw) + `-----END CERTIFICATE-----
+`
+ caFile := t.TempDir()+"/panel-ca.pem"
+ if err := os.WriteFile(caFile, []byte(pem), 0600); err != nil { t.Fatal(err) }
+ client, err := newPanelClientWithCA(server.URL, testAgentToken, caFile)
+ if err != nil { t.Fatal(err) }
+ _, status, err := client.postJSON(context.Background(), "/health", map[string]any{})
+ if err != nil || status != http.StatusNoContent { t.Fatalf("custom CA request failed: status=%d err=%v", status, err) }
+}
+
+func TestPanelClientRejectsInvalidCustomCA(t *testing.T) {
+ caFile := t.TempDir()+"/bad-ca.pem"
+ if err := os.WriteFile(caFile, []byte("not a certificate"), 0600); err != nil { t.Fatal(err) }
+ if _, err := newPanelClientWithCA("https://panel.example", testAgentToken, caFile); err == nil { t.Fatal("expected invalid CA rejection") }
 }

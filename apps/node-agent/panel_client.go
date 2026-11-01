@@ -4,6 +4,8 @@ import (
  "bytes"
  "context"
  "crypto/tls"
+ "crypto/x509"
+ "os"
  "encoding/json"
  "errors"
  "fmt"
@@ -34,7 +36,10 @@ type jobResultRequest struct {
 
 // newPanelClient accepts only HTTPS and never follows redirects, preventing
 // accidental disclosure of the node bearer token to another host.
-func newPanelClient(rawURL, token string) (*panelClient, error) {
+func newPanelClient(rawURL, token string) (*panelClient, error) { return newPanelClientWithCA(rawURL, token, "") }
+
+// newPanelClientWithCA optionally adds a private panel CA while retaining system roots.
+func newPanelClientWithCA(rawURL, token, caFile string) (*panelClient, error) {
  if len(token) < 32 { return nil, errors.New("panel bearer token must contain at least 32 characters") }
  u, err := url.Parse(strings.TrimSpace(rawURL))
  if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
@@ -42,7 +47,14 @@ func newPanelClient(rawURL, token string) (*panelClient, error) {
  }
  u.Path = strings.TrimRight(u.Path, "/")
  transport := http.DefaultTransport.(*http.Transport).Clone()
- transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+ roots, err := x509.SystemCertPool()
+ if err != nil || roots == nil { roots = x509.NewCertPool() }
+ if caFile != "" {
+  pem, readErr := os.ReadFile(caFile)
+  if readErr != nil { return nil, fmt.Errorf("read PANEL_SERVER_CA: %w", readErr) }
+  if ok := roots.AppendCertsFromPEM(pem); !ok { return nil, errors.New("PANEL_SERVER_CA contains no valid certificates") }
+ }
+ transport.TLSClientConfig = &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: roots}
  client := &http.Client{Transport: transport, Timeout: 10 * time.Second,
   CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}
  return &panelClient{baseURL: strings.TrimRight(u.String(), "/"), token: token, http: client}, nil
