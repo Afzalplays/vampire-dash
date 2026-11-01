@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
+import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { authenticate } from "../lib/authenticate.js";
@@ -31,7 +32,7 @@ export const operationRoutes: FastifyPluginAsync = async (app) => {
 
     const server = await prisma.minecraftServer.findUnique({
       where: { id: params.data.serverId },
-      select: { id: true, ownerId: true, status: true },
+      select: { id: true, ownerId: true, nodeId: true, status: true },
     });
     if (!server) return reply.code(404).send({ error: "Server not found" });
     const isOwner = server.ownerId === user.id;
@@ -50,6 +51,7 @@ export const operationRoutes: FastifyPluginAsync = async (app) => {
       return reply.send({ operation: existing, reused: true, execution: "NOT_DISPATCHED" });
     }
 
+    if (!server.nodeId) return reply.code(409).send({ error: "Server is not assigned to a node yet" });
     if (["SUSPENDED", "DELETING", "DELETED", "ERROR"].includes(server.status)) {
       return reply.code(409).send({ error: "Server state does not allow operations" });
     }
@@ -70,13 +72,11 @@ export const operationRoutes: FastifyPluginAsync = async (app) => {
             payload: body.data.payload,
           },
         });
+        await tx.nodeAgentJob.create({
+          data: { operationId: created.id, nodeId: server.nodeId!, nonce: randomBytes(32).toString("hex"), status: "PENDING" },
+        });
         await tx.auditLog.create({
-          data: {
-            actorUserId: user.id,
-            action: "SERVER_OPERATION_QUEUED",
-            targetId: created.id,
-            details: `Queued ${created.type} for server ${server.id}`,
-          },
+          data: { actorUserId: user.id, action: "SERVER_OPERATION_QUEUED", targetId: created.id, details: `Queued ${created.type} for server ${server.id}; agent job pending secure dispatch` },
         });
         return created;
       });
