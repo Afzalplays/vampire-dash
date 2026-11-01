@@ -62,7 +62,7 @@ func operationStageNumber(stage operationStage) int {
 }
 
 func validateOperationJournalRecord(record operationJournalRecord) error {
-	if !replayJobIDPattern.MatchString(record.JobID) || !replayNoncePattern.MatchString(record.Nonce) ||
+	if !replayJobIDPattern.MatchString(record.JobID) || record.NodeID == "" || len(record.NodeID) > 128 || !replayNoncePattern.MatchString(record.Nonce) ||
 		!replayBodyHashPattern.MatchString(record.IdentityHash) || !validOperationStage(record.Stage) {
 		return errors.New("invalid operation journal record")
 	}
