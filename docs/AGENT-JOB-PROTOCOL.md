@@ -10,7 +10,7 @@ The Go agent has strict signed-envelope validation and an append-only, fsync-bac
 
 The Go panel HTTPS client supports bounded claim, acknowledgement, renewal and result requests. It rejects non-HTTPS panel URLs, blocks redirects to prevent bearer-token disclosure, bounds response sizes and supports an optional private panel CA while retaining system trust roots.
 
-A testable polling state machine now connects the panel client contract, signature validation, durable replay journal, acknowledgement and bounded result reporting. It refuses to start without a concrete executor. It ACKs only after the replay record is fsynced; identical redelivery retries ACK without re-executing. The poller is not wired into agent startup, and no production executor exists yet.
+A testable polling state machine now connects the panel client contract, signature validation, durable replay journal, acknowledgement, bounded result reporting and periodic lease renewal while an executor runs. It refuses to start without a concrete executor and a bounded renewal interval. It ACKs only after the replay record is fsynced; identical redelivery retries ACK without re-executing. Renewal failure cancels the executor context and is reported as a failed operation. The poller is not wired into agent startup, and no production executor exists yet.
 
 Important remaining delivery edge cases: a lease reclaimed with a newly serialized signed envelope may conflict with the journal's exact-body replay key, and a process failure after ACK but before result reporting needs durable local pending-result recovery. These must be resolved before enabling dispatch. Long-running operations also require active lease renewal.
 
@@ -40,7 +40,7 @@ Raw shell strings, arbitrary URLs, Docker arguments, host paths, environment-var
 
 1. Fix stable replay identity across lease renewals/reclaims and persist pending results so ACKed work can safely recover after a process restart.
 2. Add integration tests for ACK timeouts, crash points, re-leases, duplicate delivery, clock skew, expired leases and partial failures.
-3. Implement active lease renewal for long-running operations.
+3. Wire the poller's tested lease-renewal loop into production startup only after a real executor exists; add timing and failure-injection integration tests.
 4. Add node credential rotation and revocation; retain mandatory mTLS certificate verification and per-node HMAC keys.
 5. Implement a typed Docker runtime adapter that maps allowlisted actions to fixed container APIs; never invoke a shell or accept user-controlled container identifiers/options.
 6. Enforce server-to-node ownership, per-server resource boundaries, rate limits and audit events before dispatch.
