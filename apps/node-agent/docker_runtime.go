@@ -270,7 +270,7 @@ func (d *dockerRuntime) provisionServer(ctx context.Context, job signedNodeJob) 
  if inspected.State.Running { return nil,errors.New("new server container unexpectedly started before provisioning completed") }
  response, err = d.request(ctx,http.MethodPost,"/containers/"+created.ID+"/start")
  if err != nil { return nil,fmt.Errorf("start provisioned server container: %w",err) }; response.Body.Close()
- running, err := d.inspectProvisionedContainer(ctx,created.ID,job.ServerID,payload)
+ running, err := d.inspectProvisionedContainer(ctx,created.ID,job.ServerID,job.NodeID,payload)
  if err != nil { return nil,err }
  if !running.State.Running { return nil,errors.New("provisioned Minecraft container did not reach running state") }
  return map[string]any{"state":"RUNNING","port":payload.Port,"containerId":created.ID,"diskLimitMb":payload.DiskMB,"memoryLimitMb":payload.MemoryMB,"cpuPercent":payload.CPUPercent},nil
