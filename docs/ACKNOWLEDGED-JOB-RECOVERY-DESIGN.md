@@ -53,4 +53,6 @@ The node-authenticated reconciliation endpoint and the Go panel client are now i
 
 Implemented since the initial recovery milestone: administrator-triggered node credential rotation (with immediate revocation, node disablement, and an acknowledged-job guard), plus a read-only administrator endpoint to inspect uncertain jobs. PostgreSQL integration tests cover credential rotation, acknowledged-job blocking, old-token revocation, uncertain-job listing, matching reconciliation results, duplicate commits, identity conflicts, and live leases. Operator handling documentation is in `docs/NODE-CREDENTIAL-ROTATION.md` and `docs/UNCERTAIN-JOB-OPERATIONS.md`.
 
-Still not implemented: additional reconciliation cross-node isolation and transaction-failure tests, a typed production Docker runtime adapter, runtime integration/fault-injection tests, and production startup wiring. The agent remains undispatched in production.
+A typed Docker Engine adapter is implemented but not wired into startup. It supports desired-state START/STOP through fixed Unix-socket API calls and resolves the signed server ID through a unique panel-owned container label. RESTART and UPDATE_PROPERTIES remain disabled.
+
+Still not implemented: reconciliation cross-node isolation and transaction-failure tests, the trusted container provisioning/label assignment path, disposable-Docker runtime integration/fault-injection tests, resource-limit verification, and production startup wiring. The agent remains undispatched in production.
