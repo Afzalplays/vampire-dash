@@ -14,7 +14,7 @@ A testable polling state machine now connects the panel client contract, signatu
 
 The stable replay identity issue is resolved. One important delivery gap remains: a process failure after ACK but before result reporting needs durable pending-result recovery and a server-side reconciliation path. Until then, acknowledged jobs whose result cannot be reported fail closed; they are never automatically re-executed. Long-running operations also require active lease renewal.
 
-The agent currently exposes read-only health and capacity telemetry. It has no Docker runtime adapter or production server-operation execution. Customer operations must remain undispatched.
+The agent currently exposes read-only health and capacity telemetry. It has no Docker runtime adapter or production server-operation execution. Customer operations must remain undispatched. The detailed recovery contract is documented in [ACKNOWLEDGED-JOB-RECOVERY-DESIGN.md](./ACKNOWLEDGED-JOB-RECOVERY-DESIGN.md); it is a design specification, not an implemented capability.
 
 ## Envelope
 
@@ -38,7 +38,7 @@ Raw shell strings, arbitrary URLs, Docker arguments, host paths, environment-var
 
 ## Required before enabling dispatch
 
-1. Persist pending execution/results and add a server-side reconciliation path so ACKed work can safely recover after a process restart; keep uncertain operations fail-closed.
+1. Implement the durable monotonic agent journal and node-authenticated result reconciliation contract in [ACKNOWLEDGED-JOB-RECOVERY-DESIGN.md](./ACKNOWLEDGED-JOB-RECOVERY-DESIGN.md); keep uncertain operations fail-closed and never replay an acknowledged side effect.
 2. Add integration tests for ACK timeouts, crash points, re-leases, duplicate delivery, clock skew, expired leases and partial failures.
 3. Wire the poller's tested lease-renewal loop into production startup only after a real executor exists; add timing and failure-injection integration tests.
 4. Add node credential rotation and revocation; retain mandatory mTLS certificate verification and per-node HMAC keys.
