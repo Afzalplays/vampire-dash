@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"testing"
+	"strings"
 	"time"
 )
 
@@ -19,6 +20,19 @@ func TestAcceptSignedJobMarksIdenticalRetryAsDuplicate(t *testing.T) {
 	changed := signedJobBody(now, "STOP", "{}")
 	if _, _, err = acceptSignedNodeJob(changed, signJob(changed), jobTestSecret, "node-a", path, now); err == nil {
 		t.Fatal("expected conflicting job ID reuse rejection")
+	}
+}
+
+func TestAcceptSignedJobRejectsChangedServerIdentity(t *testing.T) {
+	now := time.Now().UTC()
+	path := t.TempDir() + "/state/replay.jsonl"
+	first := signedJobBody(now, "START", "{}")
+	if _, duplicate, err := acceptSignedNodeJob(first, signJob(first), jobTestSecret, "node-a", path, now); err != nil || duplicate {
+		t.Fatalf("first accept duplicate=%v err=%v", duplicate, err)
+	}
+	changed := []byte(strings.Replace(string(first), "server-test", "server-other", 1))
+	if _, _, err := acceptSignedNodeJob(changed, signJob(changed), jobTestSecret, "node-a", path, now); err == nil {
+		t.Fatal("expected changed server identity to be rejected")
 	}
 }
 
