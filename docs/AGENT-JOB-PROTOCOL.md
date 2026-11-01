@@ -39,7 +39,7 @@ Raw shell strings, arbitrary URLs, Docker arguments, host paths, environment-var
 
 ## Required before enabling dispatch
 
-1. Add route-level database integration tests for credential rotation and additional reconciliation failure/isolation cases; retain mandatory mTLS certificate verification and per-node HMAC keys.
+1. Add cross-node isolation and transaction-failure tests for reconciliation; retain mandatory mTLS certificate verification and per-node HMAC keys.
 2. Add fault-injection tests for ACK timeouts, process crash points, re-leases, duplicate delivery, clock skew, expired leases and partial runtime failures.
 3. Wire the poller's tested lease-renewal loop into production startup only after a real executor exists; add timing and failure-injection integration tests.
 5. Implement a typed Docker runtime adapter that resolves the signed server ID through a panel-owned server/container mapping and maps allowlisted actions to fixed container APIs; never invoke a shell or accept user-controlled container identifiers/options.
