@@ -188,6 +188,8 @@ export const agentJobRoutes: FastifyPluginAsync = async (app) => {
       if (operationUpdate.count !== 1) throw new Error("Operation state changed while recording node result");
       if (job.operation.type === "PROVISION_SERVER") {
         await tx.minecraftServer.updateMany({ where: { id: job.operation.serverId, nodeId: node.id, status: "PENDING" }, data: { status: body.data.status === "SUCCEEDED" ? "RUNNING" : "ERROR" } });
+      } else if (body.data.status === "SUCCEEDED" && ["START", "RESTART", "STOP"].includes(job.operation.type)) {
+        await tx.minecraftServer.updateMany({ where: { id: job.operation.serverId, nodeId: node.id }, data: { status: job.operation.type === "STOP" ? "STOPPED" : "RUNNING" } });
       }
       return body.data.status;
     }, { maxWait: 10000, timeout: 15000 });
@@ -301,6 +303,8 @@ export const agentJobRoutes: FastifyPluginAsync = async (app) => {
       if (updatedOperation.count !== 1) throw new Error("Operation changed during reconciliation");
       if (job.operation.type === "PROVISION_SERVER") {
         await tx.minecraftServer.updateMany({ where: { id: job.operation.serverId, nodeId: node.id, status: "PENDING" }, data: { status: terminal.status === "SUCCEEDED" ? "RUNNING" : "ERROR" } });
+      } else if (terminal.status === "SUCCEEDED" && ["START", "RESTART", "STOP"].includes(job.operation.type)) {
+        await tx.minecraftServer.updateMany({ where: { id: job.operation.serverId, nodeId: node.id }, data: { status: job.operation.type === "STOP" ? "STOPPED" : "RUNNING" } });
       }
       return "RESULT_ACCEPTED";
     }, { maxWait: 10000, timeout: 15000 });
