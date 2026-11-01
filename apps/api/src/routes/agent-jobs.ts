@@ -6,6 +6,24 @@ import { prisma } from "../lib/prisma.js";
 import { env } from "../env.js";
 import { decryptNodeCredential } from "../lib/node-credentials.js";
 
+
+const powerPayloadSchema = z.object({}).strict();
+const propertiesPayloadSchema = z.object({
+  motd: z.string().max(128).optional(),
+  difficulty: z.enum(["peaceful", "easy", "normal", "hard"]).optional(),
+  gamemode: z.enum(["survival", "creative", "adventure", "spectator"]).optional(),
+  maxPlayers: z.number().int().min(1).max(500).optional(),
+  pvp: z.boolean().optional(), onlineMode: z.boolean().optional(), allowFlight: z.boolean().optional(),
+  viewDistance: z.number().int().min(2).max(32).optional(),
+  simulationDistance: z.number().int().min(2).max(32).optional(),
+  spawnProtection: z.number().int().min(0).max(128).optional(),
+}).strict().refine((value) => Object.keys(value).length > 0, "At least one property is required");
+function validateClaimedPayload(action: string, payload: unknown): boolean {
+  if (["START", "STOP", "RESTART"].includes(action)) return powerPayloadSchema.safeParse(payload).success;
+  if (action === "UPDATE_PROPERTIES") return propertiesPayloadSchema.safeParse(payload).success;
+  return false;
+}
+
 const tokenDigest = (token: string) =>
   createHmac("sha256", env.SESSION_SECRET).update(token, "utf8").digest("hex");
 
@@ -189,6 +207,14 @@ export const agentJobRoutes: FastifyPluginAsync = async (app) => {
     }, { maxWait: 10000, timeout: 15000 });
 
     if (!claimed) return reply.code(204).send();
+
+    if (!validateClaimedPayload(claimed.operationType, claimed.payload)) {
+      await prisma.$transaction(async (tx) => {
+        await tx.nodeAgentJob.updateMany({ where: { id: claimed.id, nodeId: node.id, status: "LEASED", leaseTokenHash }, data: { status: "DEAD", leaseTokenHash: null, leaseExpiresAt: null, lastErrorCode: "INVALID_JOB_PAYLOAD", lastError: "Queued operation payload failed node-agent schema validation" } });
+        await tx.minecraftServerOperation.updateMany({ where: { id: claimed.operationId, status: "QUEUED" }, data: { status: "FAILED", errorCode: "INVALID_JOB_PAYLOAD", errorMessage: "Queued operation payload failed node-agent schema validation", finishedAt: new Date() } });
+      });
+      return reply.code(409).send({ error: "Queued operation payload is invalid and was rejected" });
+    }
 
     const signingSecret = decryptNodeCredential({
       ciphertext: node.tokenCiphertext,
