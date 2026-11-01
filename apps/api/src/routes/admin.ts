@@ -198,6 +198,17 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     });
     return { nodes };
   });
+  app.patch("/nodes/:nodeId", async (request, reply) => {
+    const admin = await requireAdmin(request, reply); if (!admin) return;
+    const params = z.object({ nodeId: z.string().min(1).max(128) }).safeParse(request.params);
+    const body = z.object({ minecraftAddress: z.string().trim().min(1).max(255).regex(/^[A-Za-z0-9.-]+$/).optional() }).strict().refine((value) => value.minecraftAddress !== undefined, "A public Minecraft address is required").safeParse(request.body);
+    if (!params.success || !body.success) return reply.code(400).send({ error: "Invalid node update" });
+    const existing = await prisma.minecraftNode.findUnique({ where: { id: params.data.nodeId }, select: { id: true, name: true } });
+    if (!existing) return reply.code(404).send({ error: "Node not found" });
+    const node = await prisma.minecraftNode.update({ where: { id: existing.id }, data: { minecraftAddress: body.data.minecraftAddress }, select: { id: true, name: true, minecraftAddress: true } });
+    await prisma.auditLog.create({ data: { actorUserId: admin.id, action: "NODE_PUBLIC_ADDRESS_UPDATED", targetId: node.id, details: `Updated public Minecraft address for node ${node.name}` } });
+    return { ok: true, node };
+  });
   app.post("/nodes", { config: { rateLimit: { max: 5, timeWindow: "1 hour" } } }, async (request, reply) => {
     const admin = await requireAdmin(request, reply); if (!admin) return;
     const parsed = nodeCreateSchema.safeParse(request.body);
