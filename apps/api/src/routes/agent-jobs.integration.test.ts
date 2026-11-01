@@ -132,12 +132,13 @@ describe("agent reconciliation route database integration", () => {
         passwordHash: "test-only-password-hash",
       },
     });
+    const liveToken = token + "live";
     const node = await prisma.minecraftNode.create({
       data: {
         name: "integration-live-node",
         location: "ci",
         endpoint: "https://live-node.example.test",
-        tokenHash: createHmac("sha256", env.SESSION_SECRET).update(token + "live").digest("hex"),
+        tokenHash: createHmac("sha256", env.SESSION_SECRET).update(liveToken).digest("hex"),
         enabled: true,
         healthStatus: "ONLINE",
         memoryMb: 8192,
@@ -171,7 +172,7 @@ describe("agent reconciliation route database integration", () => {
       const response = await app.inject({
         method: "POST",
         url: `/api/agent/jobs/${job.id}/reconcile`,
-        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        headers: { authorization: `Bearer ${liveToken}`, "content-type": "application/json" },
         payload: { identityHash, state: "EXECUTION_STARTED" },
       });
       assert.equal(response.statusCode, 200, response.body);
