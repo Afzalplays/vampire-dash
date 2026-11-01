@@ -174,7 +174,8 @@ func (d *dockerRuntime) Execute(ctx context.Context, job signedNodeJob) (map[str
 			return nil, errors.New("power operation payload must be an empty object")
 		}
 	case "RESTART":
-		return nil, errors.New("RESTART is disabled until durable restart idempotency is implemented")
+		var payload powerJobPayload
+		if err := decodeStrictPayload(job.Payload, &payload); err != nil { return nil, errors.New("power operation payload must be an empty object") }
 	case "UPDATE_PROPERTIES":
 		return nil, errors.New("UPDATE_PROPERTIES is disabled until a verified server-file adapter is implemented")
 	default:
@@ -204,11 +205,19 @@ func (d *dockerRuntime) Execute(ctx context.Context, job signedNodeJob) (map[str
 		targetState = "STOPPED"
 		if running {
 			response, err := d.request(ctx, http.MethodPost, "/containers/"+containerID+"/stop?t=30")
-			if err != nil {
-				return nil, err
-			}
+			if err != nil { return nil, err }
 			response.Body.Close()
 		}
+	case "RESTART":
+		if running {
+			response, err := d.request(ctx, http.MethodPost, "/containers/"+containerID+"/stop?t=30")
+			if err != nil { return nil, err }
+			response.Body.Close()
+		}
+		response, err := d.request(ctx, http.MethodPost, "/containers/"+containerID+"/start")
+		if err != nil { return nil, err }
+		response.Body.Close()
+		targetState = "RUNNING"
 	}
 	afterRunning, err := d.inspectServerContainer(ctx, containerID, job.ServerID)
 	if err != nil {
