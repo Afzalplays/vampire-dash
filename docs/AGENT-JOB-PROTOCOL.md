@@ -10,8 +10,7 @@ server operations as `NOT_DISPATCHED`.
 
 The API now has a durable `NodeAgentJob` outbox record per operation, bound to
 one node, with a unique nonce, bounded retry count, lease token hash and lease
-expiry fields. The schema is storage only: no code currently creates, leases,
-or dispatches these records.
+expiry fields. The API creates an outbox row in the same transaction as each accepted operation. The `worker:agent-jobs` recovery process requeues expired leases with bounded exponential backoff and marks exhausted jobs DEAD/operations FAILED. It does not claim, dispatch, or execute jobs; actual agent delivery remains disabled.
 
 ## Envelope
 
@@ -44,8 +43,7 @@ variable injection and user-defined executable commands are forbidden.
 
 1. Persist agent-side nonce replay protection across restarts and atomically
    reject duplicate job IDs/nonces.
-2. Implement database-backed leases with bounded attempts, lease expiry,
-   heartbeat, cancellation semantics and idempotent result reconciliation.
+2. Implement a trusted dispatcher that atomically claims eligible PENDING jobs, issues short leases, and reconciles signed acknowledgements. Expired-lease recovery and bounded backoff are implemented; heartbeat, cancellation semantics and result reconciliation remain pending.
 3. Authenticate node identity and rotate per-node HMAC keys; retain mandatory
    mTLS certificate verification.
 4. Add a typed runtime adapter that maps actions to fixed container APIs; never
