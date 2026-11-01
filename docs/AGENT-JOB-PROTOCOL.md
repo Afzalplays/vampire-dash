@@ -6,7 +6,7 @@ The panel API has a durable `NodeAgentJob` outbox record per operation, bound to
 
 The `worker:agent-jobs` recovery process retries expired pre-acknowledgement leases with bounded backoff. Expired acknowledged leases fail closed rather than replaying potentially side-effecting work. The node-authenticated `/api/agent/jobs/:jobId/reconcile` endpoint can accept a locally persisted terminal result after an acknowledged lease is marked lost, but only when the server independently verifies the immutable operation identity and the job has not been superseded. Matching committed results are idempotent; conflicting results are rejected. The Go poller reconciles `RESULT_PENDING` records before claiming new work. `EXECUTION_STARTED` without a durable terminal result remains uncertain and is never replayed.
 
-The Go agent has strict signed-envelope validation and an append-only, fsync-backed replay journal protected by a file lock. The journal stores a SHA-256 digest of immutable operation identity (job ID, node ID, nonce, action and canonical payload), excluding lease timestamps. The exact envelope bytes are still HMAC-authenticated. Reissued leases with new timestamps are recognized as the same accepted operation; reuse of a job ID or nonce with different operation content fails closed.
+The Go agent has strict signed-envelope validation and an append-only, fsync-backed replay journal protected by a file lock. The journal stores a SHA-256 digest of immutable operation identity (job ID, node ID, nonce, immutable server ID, action and canonical payload), excluding lease timestamps. The exact envelope bytes are still HMAC-authenticated. Reissued leases with new timestamps are recognized as the same accepted operation; reuse of a job ID or nonce with different operation content fails closed.
 
 The Go panel HTTPS client supports bounded claim, acknowledgement, renewal and result requests. It rejects non-HTTPS panel URLs, blocks redirects to prevent bearer-token disclosure, bounds response sizes and supports an optional private panel CA while retaining system trust roots.
 
@@ -22,6 +22,7 @@ The panel-to-agent job envelope contains:
 
 - `id`: opaque job identifier (16-128 URL-safe characters)
 - `nodeId`: exact registered node identity
+- `serverId`: immutable panel-owned Minecraft server identity associated with the operation
 - `nonce`: cryptographically random 16-64 byte hex value
 - `issuedAt`, `expiresAt`: RFC3339 timestamps, lifetime no more than 2 minutes
 - `action`: allowlisted typed action
@@ -41,8 +42,8 @@ Raw shell strings, arbitrary URLs, Docker arguments, host paths, environment-var
 1. Implement the durable monotonic agent journal and node-authenticated result reconciliation contract in [ACKNOWLEDGED-JOB-RECOVERY-DESIGN.md](./ACKNOWLEDGED-JOB-RECOVERY-DESIGN.md); keep uncertain operations fail-closed and never replay an acknowledged side effect.
 2. Add integration tests for ACK timeouts, crash points, re-leases, duplicate delivery, clock skew, expired leases and partial failures.
 3. Wire the poller's tested lease-renewal loop into production startup only after a real executor exists; add timing and failure-injection integration tests.
-4. Add node credential rotation and revocation; retain mandatory mTLS certificate verification and per-node HMAC keys.
-5. Implement a typed Docker runtime adapter that maps allowlisted actions to fixed container APIs; never invoke a shell or accept user-controlled container identifiers/options.
+4. Add route-level database integration tests for reconciliation and credential rotation; retain mandatory mTLS certificate verification and per-node HMAC keys.
+5. Implement a typed Docker runtime adapter that resolves the signed server ID through a panel-owned server/container mapping and maps allowlisted actions to fixed container APIs; never invoke a shell or accept user-controlled container identifiers/options.
 6. Enforce server-to-node ownership, per-server resource boundaries, rate limits and audit events before dispatch.
 7. Wire the polling loop into startup only after the runtime adapter and all preceding safety gates pass.
 
