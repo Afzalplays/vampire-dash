@@ -1,9 +1,11 @@
 # Vampire Dash Node Agent
 
 The node agent is a separate Go service installed on each Minecraft compute node.
-It currently provides secure HTTPS/mTLS connectivity, authenticated status and
-read-only host capacity telemetry. It does not create containers, mount customer
-files, or expose Docker.
+It provides secure HTTPS/mTLS connectivity, authenticated status and read-only host
+capacity telemetry. An explicitly opt-in outbound worker can claim signed jobs and
+perform START/STOP/RESTART against an existing Docker container only when exactly
+one container has the panel-owned server ID label. It does not yet provision containers,
+assign ports, mount customer data or expose Docker over HTTP.
 
 ## Security controls
 
@@ -36,7 +38,12 @@ Protect node and panel private keys with root-only access.
 | `AGENT_TLS_CERT` | Agent HTTPS certificate PEM |
 | `AGENT_TLS_KEY` | Agent private key PEM |
 | `AGENT_CLIENT_CA` | CA PEM used to verify panel client certificates |
-| `AGENT_DATA_DIR` | Filesystem path whose disk capacity is reported; defaults to `/` |
+| `AGENT_DATA_DIR` | Filesystem path whose disk capacity is reported; defaults to `/`. When job execution is enabled, this must be an explicit persistent non-root directory and is secured to mode `0700` |
+| `AGENT_ENABLE_JOB_EXECUTION` | Set to `true` to opt in to outbound job polling; default `false` |
+| `PANEL_API_URL` | HTTPS base URL of the Vampire Dash API; required when job execution is enabled |
+| `AGENT_DOCKER_SOCKET` | Local Docker Unix socket; defaults to `/var/run/docker.sock` |
+| `AGENT_JOB_POLL_SECONDS` | Poll interval from 1 to 60 seconds; defaults to 5 |
+| `AGENT_LEASE_RENEW_SECONDS` | Lease renewal interval from 1 to 30 seconds; defaults to 20 |
 
 ## Build and run
 
@@ -57,6 +64,14 @@ go vet ./...
 go build -o vampire-node-agent .
 ./vampire-node-agent
 ```
+
+## Optional job worker
+
+Job execution is disabled unless `AGENT_ENABLE_JOB_EXECUTION=true` is explicitly set. When enabled, the agent requires an HTTPS panel URL, a persistent non-root data directory, and an existing local Docker Unix socket. The panel bearer token is also used to verify the signed job envelope. The worker persists replay and operation journals before acknowledging jobs, renews leases while actions run, and refuses new work when an operation is uncertain.
+
+The current Docker adapter supports desired-state START and STOP plus a stop/start RESTART against exactly one container labelled `com.vampirenodes.server_id=<signed serverId>`. It re-inspects the container label before acting and verifies the resulting state. It never accepts a container ID or shell command from the job payload. `UPDATE_PROPERTIES` remains disabled.
+
+**Do not enable the worker on customer nodes yet unless the containers were provisioned by a trusted process that assigns the correct immutable label.** The repository does not yet have the container provisioning, CPU/RAM/disk quota, port allocation, or filesystem isolation path. A label alone is not a complete tenant-isolation boundary.
 
 ## Endpoints
 
@@ -93,10 +108,6 @@ curl --cacert /etc/vampire-panel/pki/node-agent-ca.crt \
 - Validate certificate SANs and expiry during panel-side TLS client setup.
 - Do not disable certificate verification or use insecure-skip-verify.
 
-## Not implemented
+## Remaining work
 
-Docker provisioning, per-container resource accounting, server lifecycle operations,
-allocations, WebSocket console, file transfer, backups, panel-side enrollment,
-certificate issuance/rotation automation and signed request replay protection are
-not implemented. Do not connect this agent to live customer servers until
-authorization, Docker isolation, quotas, audit logging and integration tests are complete.
+Trusted container provisioning, cgroup resource enforcement, disk quotas, port allocation/firewall integration, server-specific filesystem isolation, WebSocket console, file transfer, backups, automated panel-side enrollment and certificate issuance/rotation are not implemented. The worker is opt-in and must remain disabled for production customer traffic until those isolation and integration gates pass.
