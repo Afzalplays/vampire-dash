@@ -35,7 +35,7 @@ func TestAcceptSignedJobTreatsReissuedLeaseAsSameOperation(t *testing.T) {
 func TestAcceptSignedJobRejectsChangedPayloadOnReissue(t *testing.T) {
 	now := time.Now().UTC()
 	path := t.TempDir() + "/state/replay.jsonl"
-	first := signedJobBody(now, "RESTART", "{}")
+	first := signedJobBody(now, "UPDATE_PROPERTIES", `{"motd":"original"}`)
 	if _, _, err := acceptSignedNodeJob(first, signJob(first), jobTestSecret, "node-a", path, now); err != nil { t.Fatal(err) }
 	changed := signedJobBody(now.Add(10*time.Second), "UPDATE_PROPERTIES", `{"motd":"changed"}`)
 	if _, _, err := acceptSignedNodeJob(changed, signJob(changed), jobTestSecret, "node-a", path, now.Add(10*time.Second)); err == nil {
