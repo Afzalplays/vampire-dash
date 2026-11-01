@@ -216,6 +216,7 @@ func latestOperationJournalRecords(path string) (map[string]operationJournalReco
 		return nil, errors.New("operation journal is not a valid regular file")
 	}
 	if err := file.Chmod(0600); err != nil { return nil, fmt.Errorf("secure operation journal permissions: %w", err) }
+	if err := file.Sync(); err != nil { return nil, fmt.Errorf("sync operation journal permissions: %w", err) }
 	latest := make(map[string]operationJournalRecord)
 	if _, err := file.Seek(0, 0); err != nil {
 		return nil, fmt.Errorf("rewind operation journal for recovery: %w", err)
