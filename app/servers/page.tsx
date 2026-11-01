@@ -8,11 +8,11 @@ type Server = {
   node: { name: string; location: string; healthStatus: string; lastSeenAt: string | null } | null;
   access: { role: string; permissions: Record<string, boolean> };
 };
+type Release = { software: string; minecraftVersion: string; softwareVersion: string; recommended: boolean };
 type Entitlement = {
   id: string; expiresAt: string;
   plan: { name: string; memoryMb: number; diskMb: number; cpuPercent: number; serverSlots: number };
 };
-const software = ["PAPER", "PURPUR", "VANILLA", "FABRIC", "FORGE", "NEOFORGE", "VELOCITY", "BUNGEECORD"];
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api${path}`, {
@@ -29,6 +29,7 @@ const mb = (value: number) => value >= 1024 ? `${(value / 1024).toFixed(value % 
 export default function ServersPage() {
   const [servers, setServers] = useState<Server[]>([]);
   const [entitlements, setEntitlements] = useState<Entitlement[]>([]);
+  const [releases, setReleases] = useState<Release[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -41,17 +42,23 @@ export default function ServersPage() {
   const load = useCallback(async () => {
     setLoading(true); setError("");
     try {
-      const [serverData, planData] = await Promise.all([
+      const [serverData, planData, releaseData] = await Promise.all([
         api<{servers: Server[]}>("/servers"),
         api<{entitlements: Entitlement[]}>("/plans/me/entitlement"),
+        api<{releases: Release[]}>("/software/releases"),
       ]);
       setServers(serverData.servers);
       setEntitlements(planData.entitlements);
+      setReleases(releaseData.releases);
       setEntitlementId(current => current || planData.entitlements[0]?.id || "");
     } catch (e) { setError(e instanceof Error ? e.message : "Unable to load servers"); }
     finally { setLoading(false); }
   }, []);
   useEffect(() => { void load(); }, [load]);
+  const availableSoftware = [...new Set(releases.map(release => release.software))];
+  const availableVersions = [...new Set(releases.filter(release => release.software === kind).map(release => release.minecraftVersion))];
+  useEffect(() => { if (availableSoftware.length && !availableSoftware.includes(kind)) setKind(availableSoftware[0]); }, [availableSoftware.join(","), kind]);
+  useEffect(() => { if (availableVersions.length && !availableVersions.includes(version)) setVersion(availableVersions[0]); }, [availableVersions.join(","), version]);
 
   async function createServer(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); setCreating(true); setError(""); setNotice("");
@@ -78,13 +85,13 @@ export default function ServersPage() {
       {notice && <div role="status" style={{...alertStyle,borderColor:"#166534",color:"#86efac"}}>{notice}</div>}
       <section style={panelStyle}>
         <h2 style={{marginTop:0,fontSize:19}}>Create a server</h2>
-        {entitlements.length === 0 ? <p style={{color:"#a1a1aa"}}>No active plan entitlement found. Choose or purchase a plan before creating a server.</p> :
+        {entitlements.length === 0 ? <p style={{color:"#a1a1aa"}}>No active plan entitlement found. Choose or purchase a plan before creating a server.</p> : releases.length === 0 ? <p style={{color:"#a1a1aa"}}>No compatible software releases are enabled yet. Contact an administrator.</p> :
         <form onSubmit={createServer} style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:14,alignItems:"end"}}>
           <label style={labelStyle}>Server name<input required minLength={3} maxLength={32} value={name} onChange={e=>setName(e.target.value)} placeholder="My Survival Server" style={inputStyle}/></label>
           <label style={labelStyle}>Plan entitlement<select value={entitlementId} onChange={e=>setEntitlementId(e.target.value)} style={inputStyle}>{entitlements.map(e=><option key={e.id} value={e.id}>{e.plan.name} · {mb(e.plan.memoryMb)} RAM · {e.plan.serverSlots} slots</option>)}</select></label>
-          <label style={labelStyle}>Software<select value={kind} onChange={e=>setKind(e.target.value)} style={inputStyle}>{software.map(s=><option key={s} value={s}>{pretty(s)}</option>)}</select></label>
-          <label style={labelStyle}>Minecraft version<input required maxLength={32} value={version} onChange={e=>setVersion(e.target.value)} style={inputStyle}/></label>
-          <button disabled={creating || !entitlementId} type="submit" style={{...buttonStyle,background:"#991b1b",opacity:creating?0.6:1}}>{creating?"Submitting…":"Create server"}</button>
+          <label style={labelStyle}>Software<select value={kind} onChange={e=>{setKind(e.target.value);const first=releases.find(r=>r.software===e.target.value);if(first)setVersion(first.minecraftVersion);}} style={inputStyle}>{availableSoftware.map(s=><option key={s} value={s}>{pretty(s)}</option>)}</select></label>
+          <label style={labelStyle}>Minecraft version<select value={version} onChange={e=>setVersion(e.target.value)} style={inputStyle}>{availableVersions.map(v=><option key={v} value={v}>{v}</option>)}</select></label>
+          <button disabled={creating || !entitlementId || !availableVersions.length} type="submit" style={{...buttonStyle,background:"#991b1b",opacity:creating?0.6:1}}>{creating?"Submitting…":"Create server"}</button>
         </form>}
       </section>
       <section style={{marginTop:28}}>
