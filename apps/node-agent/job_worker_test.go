@@ -43,7 +43,8 @@ func newTestPoller(panel *fakeJobPanel, executor *fakeJobExecutor, dir string) *
  return &nodeJobPoller{panel: panel, executor: executor, nodeID: "node-a", signingKey: jobTestSecret, journalPath: filepath.Join(dir, "replay.jsonl"), interval: time.Second, leaseRenewInterval: 30 * time.Second}
 }
 func TestPollerRequiresExecutorBeforePolling(t *testing.T) {
- p := newTestPoller(&fakeJobPanel{}, nil, t.TempDir())
+ p := newTestPoller(&fakeJobPanel{}, &fakeJobExecutor{}, t.TempDir())
+ p.executor = nil
  if err := p.validate(); err == nil { t.Fatal("poller must not claim work without an executor") }
 }
 func TestPollerEmptyQueueDoesNothing(t *testing.T) {
