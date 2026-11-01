@@ -37,6 +37,7 @@ The catalogue is empty until an administrator adds verified releases. Server pro
 ## Admin
 - `GET /admin/nodes` — list nodes with configured capacity, reserved capacity, overhead and telemetry.
 - `POST /admin/nodes` — register a disabled node using an HTTPS agent endpoint, optional public Minecraft address, bounded capacity and TCP allocation range; returns a random agent token once.
+- `PATCH /admin/nodes/:nodeId` — update the public Minecraft DNS name/IP used in customer connection strings.
 - `POST /admin/nodes/:nodeId/check` — manually check node mTLS connectivity and refresh telemetry.
 - `POST /admin/nodes/:nodeId/enable` — enable a node only after a recent successful mTLS health check and encrypted credentials are present.
 - `POST /admin/nodes/:nodeId/reservations` — reserve RAM and disk on an enabled, online node. Body: `{ "memoryMb": 1024, "diskMb": 4096, "idempotencyKey": "unique-operation-key-0001" }`. Reservations expire after 15 minutes unless consumed or released.
