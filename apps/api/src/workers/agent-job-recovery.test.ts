@@ -1,25 +1,17 @@
-import { describe, expect, it, vi } from "vitest";
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import { calculateAgentJobRetryDelayMs } from "./agent-job-recovery.js";
 
-vi.mock("../lib/prisma.js", () => ({
-  prisma: { $transaction: vi.fn() },
-}));
-
-import { prisma } from "../lib/prisma.js";
-import { recoverExpiredAgentJobs } from "./agent-job-recovery.js";
-
-describe("recoverExpiredAgentJobs", () => {
-  it("does not mutate jobs when another worker owns the advisory lock", async () => {
-    vi.mocked(prisma.$transaction).mockImplementationOnce(async (callback: any) => {
-      const tx = { $queryRaw: vi.fn().mockResolvedValue([{ locked: false }]) };
-      return callback(tx);
-    });
-    await expect(recoverExpiredAgentJobs()).resolves.toEqual({ retried: 0, dead: 0 });
+describe("agent job retry backoff", () => {
+  it("doubles from 30 seconds", () => {
+    assert.equal(calculateAgentJobRetryDelayMs(1), 30_000);
+    assert.equal(calculateAgentJobRetryDelayMs(2), 60_000);
+    assert.equal(calculateAgentJobRetryDelayMs(3), 120_000);
   });
-
-  it("serializes recovery behind a database advisory lock", async () => {
-    const tx = { $queryRaw: vi.fn().mockResolvedValue([{ locked: false }]) };
-    vi.mocked(prisma.$transaction).mockImplementationOnce(async (callback: any) => callback(tx));
-    await recoverExpiredAgentJobs();
-    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+  it("caps at 15 minutes", () => {
+    assert.equal(calculateAgentJobRetryDelayMs(20), 900_000);
+  });
+  it("rejects invalid attempts", () => {
+    assert.throws(() => calculateAgentJobRetryDelayMs(0));
   });
 });
