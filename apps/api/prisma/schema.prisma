@@ -82,6 +82,7 @@ enum AgentJobStatus {
   PENDING
   LEASED
   ACKNOWLEDGED
+  SUCCEEDED
   FAILED
   DEAD
 }
