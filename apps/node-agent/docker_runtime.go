@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/binary"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -285,6 +286,40 @@ func (d *dockerRuntime) inspectProvisionedContainer(ctx context.Context, contain
  if inspected.HostConfig.Memory!=payload.MemoryMB*1024*1024 || inspected.HostConfig.NanoCpus!=payload.CPUPercent*10_000_000 || inspected.HostConfig.StorageOpt["size"]!=strconv.FormatInt(payload.DiskMB,10)+"m" { return inspected,errors.New("Docker did not apply requested memory, CPU and disk limits") }
  binding:=inspected.HostConfig.PortBindings["25565/tcp"]; if len(binding)!=1 || binding[0].HostPort!=strconv.Itoa(payload.Port) { return inspected,errors.New("Docker did not apply reserved TCP port") }
  return inspected,nil
+}
+
+
+// readServerConsole returns a bounded, decoded Docker stdout/stderr tail. The
+// server is selected only by its immutable panel-issued label.
+func (d *dockerRuntime) readServerConsole(ctx context.Context, serverID string, tail int) (string, error) {
+ if !serverIDPattern.MatchString(serverID) || tail < 1 || tail > 200 { return "", errors.New("console request is invalid") }
+ containerID, err := d.resolveServerContainer(ctx, serverID)
+ if err != nil { return "", err }
+ if _, err := d.inspectServerContainer(ctx, containerID, serverID); err != nil { return "", err }
+ query := url.Values{}
+ query.Set("stdout", "1"); query.Set("stderr", "1"); query.Set("tail", strconv.Itoa(tail)); query.Set("timestamps", "1")
+ response, err := d.request(ctx, http.MethodGet, "/containers/"+url.PathEscape(containerID)+"/logs?"+query.Encode())
+ if err != nil { return "", err }
+ defer response.Body.Close()
+ data, err := io.ReadAll(io.LimitReader(response.Body, 64*1024+1))
+ if err != nil { return "", errors.New("unable to read container console output") }
+ if len(data) > 64*1024 { return "", errors.New("container console output exceeds size limit") }
+ // Docker's non-TTY log stream is multiplexed: 8-byte header followed by
+ // payload. Reject malformed frames rather than displaying binary framing.
+ var output strings.Builder
+ for offset := 0; offset < len(data); {
+  if len(data)-offset < 8 { return "", errors.New("Docker returned a truncated console frame") }
+  streamType := data[offset]
+  if streamType != 1 && streamType != 2 { return "", errors.New("Docker returned an unknown console stream") }
+  if data[offset+1] != 0 || data[offset+2] != 0 || data[offset+3] != 0 { return "", errors.New("Docker returned an invalid console frame header") }
+  frameLength := int(binary.BigEndian.Uint32(data[offset+4:offset+8]))
+  offset += 8
+  if frameLength < 0 || frameLength > len(data)-offset { return "", errors.New("Docker returned an invalid console frame length") }
+  if output.Len()+frameLength > 48*1024 { return "", errors.New("decoded console output exceeds size limit") }
+  output.Write(data[offset:offset+frameLength])
+  offset += frameLength
+ }
+ return output.String(), nil
 }
 
 // Execute maps server IDs to exactly one Docker container through a
