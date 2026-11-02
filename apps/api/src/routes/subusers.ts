@@ -5,6 +5,7 @@ import { authenticate } from "../lib/authenticate.js";
 
 const permissions = z.object({
   viewConsole: z.boolean().optional(),
+  consoleCommands: z.boolean().optional(),
   power: z.boolean().optional(),
   manageFiles: z.boolean().optional(),
   manageBackups: z.boolean().optional(),
