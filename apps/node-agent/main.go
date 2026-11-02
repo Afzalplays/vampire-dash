@@ -196,6 +196,25 @@ func newHandler(c config) http.Handler {
   }
   writeJSON(w, http.StatusOK, metrics)
  })))
+ mux.Handle("GET /v1/servers/{serverID}/console", requireToken(c.AgentToken, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+  serverID := r.PathValue("serverID")
+  if !serverIDPattern.MatchString(serverID) { writeJSON(w, http.StatusBadRequest, map[string]string{"error":"invalid server identity"}); return }
+  tail := 100
+  if raw := r.URL.Query().Get("tail"); raw != "" {
+   parsed, err := parseUint(raw)
+   if err != nil || parsed < 1 || parsed > 200 { writeJSON(w, http.StatusBadRequest, map[string]string{"error":"tail must be between 1 and 200"}); return }
+   tail = int(parsed)
+  }
+  socket := c.DockerSocket
+  if socket == "" { socket = "/var/run/docker.sock" }
+  docker, err := newDockerRuntime(socket)
+  if err != nil { writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error":"Docker console is unavailable"}); return }
+  ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second); defer cancel()
+  output, err := docker.readServerConsole(ctx, serverID, tail)
+  if err != nil { writeJSON(w, http.StatusBadGateway, map[string]string{"error":"Unable to retrieve server console"}); return }
+  writeJSON(w, http.StatusOK, map[string]any{"nodeId":c.NodeID,"serverId":serverID,"output":output,"sampledAt":time.Now().UTC()})
+ })))
+
  return mux
 }
 
