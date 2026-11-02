@@ -50,6 +50,39 @@ function getJson<T>(url: URL, token: string, options: { ca: Buffer; cert: Buffer
   });
 }
 
+
+export interface NodeAgentConsole {
+  nodeId: string;
+  serverId: string;
+  output: string;
+  sampledAt: string;
+}
+
+export async function fetchNodeConsole(endpoint: string, encrypted: { ciphertext: string; nonce: string; authTag: string }, serverId: string, tail = 100): Promise<NodeAgentConsole> {
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(serverId) || !Number.isSafeInteger(tail) || tail < 1 || tail > 200) {
+    throw new Error("Invalid server console request");
+  }
+  if (!env.NODE_AGENT_CA_FILE || !env.NODE_AGENT_CLIENT_CERT_FILE || !env.NODE_AGENT_CLIENT_KEY_FILE) {
+    throw new Error("Panel mTLS client is not configured");
+  }
+  const base = new URL(endpoint);
+  if (base.protocol !== "https:" || base.username || base.password || base.search || base.hash) {
+    throw new Error("Registered node endpoint is not a valid HTTPS origin");
+  }
+  const [ca, cert, key] = await Promise.all([
+    readFile(env.NODE_AGENT_CA_FILE), readFile(env.NODE_AGENT_CLIENT_CERT_FILE), readFile(env.NODE_AGENT_CLIENT_KEY_FILE),
+  ]);
+  const token = decryptNodeCredential(encrypted);
+  const url = new URL(`/v1/servers/${encodeURIComponent(serverId)}/console?tail=${tail}`, base);
+  const result = await getJson<NodeAgentConsole>(url, token, { ca, cert, key });
+  if (!result || typeof result.nodeId !== "string" || result.serverId !== serverId ||
+      typeof result.output !== "string" || Buffer.byteLength(result.output, "utf8") > 48 * 1024 ||
+      typeof result.sampledAt !== "string" || !Number.isFinite(Date.parse(result.sampledAt))) {
+    throw new Error("Node agent returned an invalid console document");
+  }
+  return result;
+}
+
 export async function fetchNodeMetrics(endpoint: string, encrypted: { ciphertext: string; nonce: string; authTag: string }): Promise<NodeAgentMetrics> {
   if (!env.NODE_AGENT_CA_FILE || !env.NODE_AGENT_CLIENT_CERT_FILE || !env.NODE_AGENT_CLIENT_KEY_FILE) {
     throw new Error("Panel mTLS client is not configured");
