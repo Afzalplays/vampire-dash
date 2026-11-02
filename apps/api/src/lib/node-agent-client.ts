@@ -32,8 +32,8 @@ function getJson<T>(url: URL, token: string, options: { ca: Buffer; cert: Buffer
       let size = 0;
       res.on("data", (chunk: Buffer) => {
         size += chunk.length;
-        if (size > 64 * 1024) {
-          req.destroy(new Error("Node agent response exceeded 64 KiB"));
+        if (size > 128 * 1024) {
+          req.destroy(new Error("Node agent response exceeded 128 KiB"));
           return;
         }
         chunks.push(chunk);
