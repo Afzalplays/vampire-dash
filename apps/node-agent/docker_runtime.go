@@ -348,8 +348,9 @@ func executeRCON(conn net.Conn, password, command string) (string, error) {
 
 func (d *dockerRuntime) sendServerCommand(ctx context.Context, serverID, nodeID, command string) (string, error) {
  if !serverIDPattern.MatchString(serverID) || !serverIDPattern.MatchString(nodeID) { return "", errors.New("server or node identity is invalid") }
- command, err = validateConsoleCommand(command)
+ normalizedCommand, err := validateConsoleCommand(command)
  if err != nil { return "", err }
+ command = normalizedCommand
  containerID, err := d.resolveServerContainer(ctx, serverID)
  if err != nil { return "", err }
  inspected, err := d.inspectServerContainerDetails(ctx, containerID, serverID)
