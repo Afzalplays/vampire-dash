@@ -6,6 +6,13 @@ const LOCK_ID = 1;
 import { calculateAgentJobRetryDelayMs } from "./agent-job-retry.js";
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+export function serverStatusAfterAgentJobFailure(operationType: string, jobStatus: string): "UNKNOWN" | "ERROR" | null {
+  if (operationType === "PROVISION_SERVER") return jobStatus === "ACKNOWLEDGED" ? "UNKNOWN" : "ERROR";
+  if (jobStatus === "ACKNOWLEDGED") return "UNKNOWN";
+  return null;
+}
+
+
 /**
  * Recover abandoned leases. This worker never sends work to an agent and never
  * executes a server operation; it only makes expired leases retryable or DEAD.
@@ -47,15 +54,11 @@ export async function recoverExpiredAgentJobs(now = new Date()): Promise<{ retri
           // Keep the customer lifecycle in sync with terminal job recovery.
           // An acknowledged lease may have performed a side effect before the
           // agent disappeared, so mark the server UNKNOWN rather than guessing.
-          if (job.operation.type === "PROVISION_SERVER") {
+          const recoveredServerStatus = serverStatusAfterAgentJobFailure(job.operation.type, job.status);
+          if (recoveredServerStatus) {
             await tx.minecraftServer.updateMany({
               where: { id: job.operation.serverId },
-              data: { status: job.status === "ACKNOWLEDGED" ? "UNKNOWN" : "ERROR" },
-            });
-          } else if (job.status === "ACKNOWLEDGED") {
-            await tx.minecraftServer.updateMany({
-              where: { id: job.operation.serverId },
-              data: { status: "UNKNOWN" },
+              data: { status: recoveredServerStatus },
             });
           }
         }
