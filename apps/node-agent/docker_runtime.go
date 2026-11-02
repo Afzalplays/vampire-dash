@@ -328,6 +328,17 @@ func readRCONPacket(reader io.Reader) (int32, int32, string, error) {
  return int32(binary.LittleEndian.Uint32(packet[:4])), int32(binary.LittleEndian.Uint32(packet[4:8])), string(packet[8:length-2]), nil
 }
 
+func executeRCON(conn net.Conn, password, command string) (string, error) {
+ if err := writeRCONPacket(conn, 1, 3, password); err != nil { return "", errors.New("unable to authenticate to private server console") }
+ authID, authType, _, err := readRCONPacket(conn)
+ if err != nil || authID == -1 || authID != 1 || authType != 2 { return "", errors.New("private server console authentication failed") }
+ if err := writeRCONPacket(conn, 2, 2, command); err != nil { return "", errors.New("unable to send server console command") }
+ responseID, responseType, output, err := readRCONPacket(conn)
+ if err != nil || responseID != 2 || responseType != 0 { return "", errors.New("server console did not return a valid command response") }
+ if len(output) > 8*1024 { output = output[:8*1024] }
+ return output, nil
+}
+
 func (d *dockerRuntime) sendServerCommand(ctx context.Context, serverID, nodeID, command string) (string, error) {
  if !serverIDPattern.MatchString(serverID) || !serverIDPattern.MatchString(nodeID) { return "", errors.New("server or node identity is invalid") }
  command = strings.TrimSpace(command)
@@ -353,14 +364,7 @@ func (d *dockerRuntime) sendServerCommand(ctx context.Context, serverID, nodeID,
  deadline := time.Now().Add(5*time.Second)
  if ctxDeadline, ok := ctx.Deadline(); ok && ctxDeadline.Before(deadline) { deadline = ctxDeadline }
  _ = conn.SetDeadline(deadline)
- if err := writeRCONPacket(conn, 1, 3, password); err != nil { return "", errors.New("unable to authenticate to private server console") }
- authID, authType, _, err := readRCONPacket(conn)
- if err != nil || authID == -1 || authID != 1 || authType != 2 { return "", errors.New("private server console authentication failed") }
- if err := writeRCONPacket(conn, 2, 2, command); err != nil { return "", errors.New("unable to send server console command") }
- responseID, responseType, output, err := readRCONPacket(conn)
- if err != nil || responseID != 2 || responseType != 0 { return "", errors.New("server console did not return a valid command response") }
- if len(output) > 8*1024 { output = output[:8*1024] }
- return output, nil
+ return executeRCON(conn, password, command)
 }
 
 func (d *dockerRuntime) readServerConsole(ctx context.Context, serverID, nodeID string, tail int) (string, error) {
