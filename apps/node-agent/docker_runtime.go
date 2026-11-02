@@ -313,8 +313,8 @@ func writeRCONPacket(writer io.Writer, id, packetType int32, body string) error 
  copy(packet[12:], body)
  returnWrite := 12 + len(body)
  packet[returnWrite], packet[returnWrite+1] = 0, 0
- _, err := writer.Write(packet)
- return err
+ for len(packet) > 0 { written, err := writer.Write(packet); if err != nil { return err }; if written == 0 { return io.ErrShortWrite }; packet = packet[written:] }
+ return nil
 }
 
 func readRCONPacket(reader io.Reader) (int32, int32, string, error) {
@@ -354,11 +354,11 @@ func (d *dockerRuntime) sendServerCommand(ctx context.Context, serverID, nodeID,
  if ctxDeadline, ok := ctx.Deadline(); ok && ctxDeadline.Before(deadline) { deadline = ctxDeadline }
  _ = conn.SetDeadline(deadline)
  if err := writeRCONPacket(conn, 1, 3, password); err != nil { return "", errors.New("unable to authenticate to private server console") }
- authID, _, _, err := readRCONPacket(conn)
- if err != nil || authID == -1 || authID != 1 { return "", errors.New("private server console authentication failed") }
+ authID, authType, _, err := readRCONPacket(conn)
+ if err != nil || authID == -1 || authID != 1 || authType != 2 { return "", errors.New("private server console authentication failed") }
  if err := writeRCONPacket(conn, 2, 2, command); err != nil { return "", errors.New("unable to send server console command") }
- responseID, _, output, err := readRCONPacket(conn)
- if err != nil || responseID != 2 { return "", errors.New("server console did not return a valid command response") }
+ responseID, responseType, output, err := readRCONPacket(conn)
+ if err != nil || responseID != 2 || responseType != 0 { return "", errors.New("server console did not return a valid command response") }
  if len(output) > 8*1024 { output = output[:8*1024] }
  return output, nil
 }
