@@ -9,7 +9,7 @@ Vampire Dash is a self-hosted control-plane project under active development and
 - API: Fastify + TypeScript
 - Database: PostgreSQL + Prisma
 - Cache/queues: Redis (integration pending)
-- Game runtime: Go node-agent foundation; Docker orchestration pending
+- Game runtime: opt-in Go node agent with digest-pinned Java Minecraft Docker provisioning and power controls
 - Transport: HTTPS public edge and mandatory mTLS node-agent channel
 - Billing: provider adapters; FamGateway is the initial default
 - Email: SMTP-based OTP verification and notification templates
@@ -45,7 +45,7 @@ Web: http://localhost:3000 · API: http://127.0.0.1:4000/api/health
 - Roadmap: docs/ROADMAP.md · Contributing: CONTRIBUTING.md
 
 ## Status and safety
-Email OTP verification and SMTP notification templates are implemented as a foundation. Automated expiry scanning is available as a separate worker; durable retry queues and lifecycle event wiring remain pending. The Go node agent requires HTTPS with mTLS and an additional per-node token, but Docker provisioning, resource enforcement, lifecycle, console, file manager and backups are not implemented. MFA, CSRF protection and production session hardening remain incomplete. Payment adapters are not enabled for customer use. Never use this code for live customer hosting or payments until the security checklist and tests are complete.
+Email OTP verification, SMTP templates, entitlement-backed server creation, transactional TCP allocations, signed node jobs, digest-pinned Java container provisioning, memory/CPU/disk limits, START/STOP/RESTART, and an audited read-only console log viewer are implemented behind an opt-in node agent. The node agent requires HTTPS+mTLS and a per-node token. Disk quotas require Docker overlay2 on XFS with project quotas; firewall rules and PKI enrollment are operator-managed. Server data currently resides in the container writable layer and can be lost if the container is deleted; deletion is not exposed. Interactive console input, file manager, backups/restore, safe persistent bind mounts, Bedrock, automated enrollment, MFA, CSRF protection, payment reconciliation and production session hardening remain incomplete. Never use this code for live customer hosting or payments until the security checklist and tests are complete.
 
 Never commit API keys, environment files, private keys, customer data or production database dumps. Rotate any credential that has been exposed.
 
@@ -55,4 +55,4 @@ Copyright VampireHosting 2026 - 2027
 
 ## Automated installation
 
-The single-command panel/node installer is planned as the final release stage. Its safety and supported-platform requirements are documented in [docs/INSTALLER-SPEC.md](docs/INSTALLER-SPEC.md). It is not published yet; use the development setup until the release installer passes its fresh-install, upgrade, TLS and SSH-preservation tests.
+An interactive **node-agent bootstrap installer** is available at `https://dash.vampirenodes.in/install.sh` when the Next.js app is deployed with the `public/` assets. It installs only the node agent; it does not install the panel, provision certificates, configure firewall rules or enable job execution. Keep job execution disabled until the node storage-quota and firewall checks pass. The full panel installer, safe upgrade/rollback and automated PKI enrollment remain planned; see [docs/INSTALLER-SPEC.md](docs/INSTALLER-SPEC.md).
