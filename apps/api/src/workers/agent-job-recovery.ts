@@ -1,4 +1,6 @@
 import { prisma } from "../lib/prisma.js";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 const INTERVAL_MS = 15_000;
 const LOCK_NAMESPACE = 731_205;
@@ -96,8 +98,10 @@ async function main(): Promise<void> {
   console.info("[agent-job-recovery] worker stopped");
 }
 
-main().catch(async (error) => {
-  console.error("[agent-job-recovery] fatal worker error", error);
-  await prisma.$disconnect();
-  process.exitCode = 1;
-});
+if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
+  main().catch(async (error) => {
+    console.error("[agent-job-recovery] fatal worker error", error);
+    await prisma.$disconnect();
+    process.exitCode = 1;
+  });
+}
