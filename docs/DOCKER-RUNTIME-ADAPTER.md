@@ -11,7 +11,7 @@ The Go node agent includes a typed Docker Engine adapter for Java Minecraft prov
 - Never accepts a Docker container ID, host path, shell command, or Docker option from the job payload.
 - Uses fixed Docker API endpoints for image pull, container creation, inspect, start, stop and restart; it never invokes a shell.
 - Provisioning accepts only `itzg/minecraft-server` images pinned by SHA-256 digest.
-- Applies Docker memory, NanoCPU, writable-layer `StorageOpt` size, host TCP port binding, PID limit, capability drop and `no-new-privileges`.
+- Applies Docker memory, NanoCPU, writable-layer `StorageOpt` size, host TCP port binding, PID limit, capability drop and `no-new-privileges`.\n- Generates a random per-server RCON password and enables RCON only on the container network; the RCON port is never published to the host.
 - Inspects the created container and verifies the server/node ownership labels, resource limits and host port before starting it.
 - Stores server data in the container writable layer until a quota-backed per-server bind-mount implementation is available.
 - Verifies the resulting running state after each action.
@@ -27,4 +27,4 @@ The Go node agent includes a typed Docker Engine adapter for Java Minecraft prov
 
 Per-container `StorageOpt` disk quotas require Docker overlay2 on XFS with project quotas enabled. Provisioning fails closed if Docker rejects or does not report the requested quota. Operators must also open the configured TCP port range in the host firewall. The container writable layer is persistent across restarts but will be lost if the container is deleted; server deletion is therefore not exposed.
 
-Still required: disposable-Docker integration tests, server-specific bind-mounted filesystem isolation, safe deletion, interactive WebSocket console input, file manager, backups/restore, Bedrock support and a verified properties adapter. A bounded read-only console log tail is available through the mTLS node endpoint and permission-checked customer API. Keep the worker disabled until disk quotas and firewall rules are verified on each node.
+Still required: disposable-Docker integration tests, server-specific bind-mounted filesystem isolation, safe deletion, interactive WebSocket console input, file manager, backups/restore, Bedrock support and a verified properties adapter. A bounded console log tail and private RCON command execution are available through the mTLS node endpoint and permission-checked, audited customer API. The RCON password is stored only in the container environment and is never returned to the customer. Keep the worker disabled until disk quotas and firewall rules are verified on each node.
