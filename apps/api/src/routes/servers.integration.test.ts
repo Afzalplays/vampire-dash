@@ -25,6 +25,38 @@ after(async () => {
   await prisma.$disconnect();
 });
 
+
+describe("server console authorization", () => {
+  it("denies a subuser without console permission before contacting the node", async () => {
+    const suffix = randomBytes(8).toString("hex");
+    const owner = await prisma.user.create({ data: { email: `console-owner-${suffix}@example.test`, username: `console_owner_${suffix}`, passwordHash: "test-only-password-hash", emailVerifiedAt: new Date() } });
+    const viewer = await prisma.user.create({ data: { email: `console-viewer-${suffix}@example.test`, username: `console_viewer_${suffix}`, passwordHash: "test-only-password-hash", emailVerifiedAt: new Date() } });
+    const sessionToken = token();
+    const session = await prisma.session.create({ data: { userId: viewer.id, tokenHash: digest(sessionToken), expiresAt: new Date(Date.now() + 60 * 60 * 1000) } });
+    const node = await prisma.minecraftNode.create({ data: {
+      name: `console-node-${suffix}`, location: "ci", endpoint: `https://console-${suffix}.example.test`,
+      tokenHash: digest(token()), enabled: true, healthStatus: "ONLINE", lastSeenAt: new Date(),
+      memoryMb: 8192, diskMb: 81920, allocationStart: 25565, allocationEnd: 25575,
+    } });
+    const server = await prisma.minecraftServer.create({ data: {
+      ownerId: owner.id, nodeId: node.id, name: "Console authorization test", software: "PAPER", version: "1.21.1",
+      memoryMb: 1024, diskMb: 2048, cpuPercent: 100,
+    } });
+    const subuser = await prisma.minecraftServerSubuser.create({ data: { serverId: server.id, userId: viewer.id, viewConsole: false } });
+    try {
+      const response = await app.inject({ method: "GET", url: `/api/servers/${server.id}/console?tail=20`, headers: { cookie: `vd_session=${sessionToken}` } });
+      assert.equal(response.statusCode, 403, response.body);
+      assert.match(response.json().error, /console permission/i);
+    } finally {
+      await prisma.minecraftServerSubuser.delete({ where: { id: subuser.id } });
+      await prisma.minecraftServer.delete({ where: { id: server.id } });
+      await prisma.minecraftNode.delete({ where: { id: node.id } });
+      await prisma.session.delete({ where: { id: session.id } });
+      await prisma.user.deleteMany({ where: { id: { in: [owner.id, viewer.id] } } });
+    }
+  });
+});
+
 describe("server creation resource and port allocation", () => {
   it("allocates unique ports and enforces CPU, RAM, disk and port capacity", async () => {
     const suffix = randomBytes(8).toString("hex");
