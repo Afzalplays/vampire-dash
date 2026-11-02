@@ -16,7 +16,7 @@ export interface NodeAgentMetrics {
   sampledAt: string;
 }
 
-function getJson<T>(url: URL, token: string, options: { ca: Buffer; cert: Buffer; key: Buffer; timeoutMs?: number }): Promise<T> {
+function getJson<T>(url: URL, token: string, options: { ca: Buffer; cert: Buffer; key: Buffer }): Promise<T> {
   return new Promise((resolve, reject) => {
     const req = httpsRequest(url, {
       method: "GET",
@@ -59,7 +59,7 @@ export interface NodeAgentConsole {
 }
 
 
-function postJson<T>(url: URL, token: string, body: unknown, options: { ca: Buffer; cert: Buffer; key: Buffer }): Promise<T> {
+function postJson<T>(url: URL, token: string, body: unknown, options: { ca: Buffer; cert: Buffer; key: Buffer; timeoutMs?: number }): Promise<T> {
   return new Promise((resolve, reject) => {
     const encoded = Buffer.from(JSON.stringify(body), "utf8");
     const req = httpsRequest(url, {
