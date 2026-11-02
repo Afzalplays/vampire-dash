@@ -244,9 +244,9 @@ export const serverRoutes: FastifyPluginAsync = async (app) => {
     if (!server) return reply.code(404).send({ error: "Server not found" });
     const { ownerId, subusers, ...details } = server;
     const permissions = ownerId === user.id ? {
-      viewConsole: true, power: true, manageFiles: true, manageBackups: true, manageSettings: true,
+      viewConsole: true, consoleCommands: true, power: true, manageFiles: true, manageBackups: true, manageSettings: true,
     } : subusers[0] ?? {
-      viewConsole: false, power: false, manageFiles: false, manageBackups: false, manageSettings: false,
+      viewConsole: false, consoleCommands: false, power: false, manageFiles: false, manageBackups: false, manageSettings: false,
     };
     return { server: { ...details, access: { role: ownerId === user.id ? "OWNER" : "SUBUSER", permissions } } };
   });
