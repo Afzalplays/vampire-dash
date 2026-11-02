@@ -297,6 +297,13 @@ func (d *dockerRuntime) inspectProvisionedContainer(ctx context.Context, contain
 // readServerConsole returns a bounded, decoded Docker stdout/stderr tail. The
 // server is selected only by its immutable panel-issued label.
 
+func validateConsoleCommand(command string) (string, error) {
+ command = strings.TrimSpace(command)
+ if command == "" || len(command) > 512 { return "", errors.New("console command must contain 1 to 512 bytes") }
+ for _, ch := range command { if ch == 0 || ch == '\n' || ch == '\r' || ch == '\u2028' || ch == '\u2029' || ch < 0x20 || ch == 0x7f { return "", errors.New("console command must be a single line without control characters") } }
+ return command, nil
+}
+
 func dockerEnvValue(values []string, key string) string {
  prefix := key + "="
  for _, value := range values { if strings.HasPrefix(value, prefix) { return strings.TrimPrefix(value, prefix) } }
@@ -341,9 +348,8 @@ func executeRCON(conn net.Conn, password, command string) (string, error) {
 
 func (d *dockerRuntime) sendServerCommand(ctx context.Context, serverID, nodeID, command string) (string, error) {
  if !serverIDPattern.MatchString(serverID) || !serverIDPattern.MatchString(nodeID) { return "", errors.New("server or node identity is invalid") }
- command = strings.TrimSpace(command)
- if command == "" || len(command) > 512 { return "", errors.New("console command must contain 1 to 512 bytes") }
- for _, ch := range command { if ch == 0 || ch == '\n' || ch == '\r' || ch == '\u2028' || ch == '\u2029' || ch < 0x20 || ch == 0x7f { return "", errors.New("console command must be a single line without control characters") } }
+ command, err = validateConsoleCommand(command)
+ if err != nil { return "", err }
  containerID, err := d.resolveServerContainer(ctx, serverID)
  if err != nil { return "", err }
  inspected, err := d.inspectServerContainerDetails(ctx, containerID, serverID)
