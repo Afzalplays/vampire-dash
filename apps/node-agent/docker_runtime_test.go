@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"encoding/json"
+	"encoding/binary"
 	"net"
 	"strconv"
 	"testing"
@@ -37,6 +38,62 @@ func dockerTestRuntime(handler dockerRoundTripFunc) *dockerRuntime {
 }
 
 const dockerTestContainerID = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+
+func dockerLogFrame(stream byte, payload string) []byte {
+ frame := make([]byte, 8+len(payload))
+ frame[0] = stream
+ binary.BigEndian.PutUint32(frame[4:8], uint32(len(payload)))
+ copy(frame[8:], payload)
+ return frame
+}
+
+func TestDockerConsoleReadsOnlyLabelOwnedContainerAndDecodesLogs(t *testing.T) {
+ expected := dockerLogFrame(1, "2026-11-02T10:00:00Z [Server thread/INFO]: Done!\\n") 
+ runtime := dockerTestRuntime(func(request *http.Request) (*http.Response, error) {
+  switch {
+  case request.Method == http.MethodGet && request.URL.Path == "/"+dockerAPIVersion+"/containers/json":
+   if request.URL.Query().Get("all") != "1" { t.Fatal("console must inspect stopped containers too") }
+   return dockerTestResponse(http.StatusOK, fmt.Sprintf(`[{"Id":%q,"Labels":{"%s":"server-console"}}]`, dockerTestContainerID, dockerServerLabel)), nil
+  case request.Method == http.MethodGet && request.URL.Path == "/"+dockerAPIVersion+"/containers/"+dockerTestContainerID+"/json":
+   return dockerTestResponse(http.StatusOK, fmt.Sprintf(`{"Config":{"Labels":{"%s":"server-console"}},"State":{"Running":true}}`, dockerServerLabel)), nil
+  case request.Method == http.MethodGet && request.URL.Path == "/"+dockerAPIVersion+"/containers/"+dockerTestContainerID+"/logs":
+   if request.URL.Query().Get("stdout") != "1" || request.URL.Query().Get("stderr") != "1" || request.URL.Query().Get("tail") != "50" || request.URL.Query().Get("timestamps") != "1" { t.Fatalf("unsafe or incomplete console query: %v", request.URL.Query()) }
+   return &http.Response{StatusCode:http.StatusOK,Header:make(http.Header),Body:io.NopCloser(strings.NewReader(string(expected)))},nil
+  default:
+   t.Fatalf("unexpected Docker console request: %s %s",request.Method,request.URL.RequestURI())
+   return nil,fmt.Errorf("unexpected request")
+  }
+ })
+ output, err := runtime.readServerConsole(context.Background(), "server-console", 50)
+ if err != nil { t.Fatal(err) }
+ if output != "2026-11-02T10:00:00Z [Server thread/INFO]: Done!\\n" { t.Fatalf("unexpected console output: %q", output) }
+}
+
+func TestDockerConsoleRejectsMalformedFramesAndUnsafeLimits(t *testing.T) {
+ for _, tc := range []struct{name string; data []byte; tail int}{
+  {"truncated header", []byte{1,0,0}, 10},
+  {"unknown stream", []byte{9,0,0,0,0,0,0,0}, 10},
+  {"truncated payload", []byte{1,0,0,0,0,0,0,4,'x'}, 10},
+  {"invalid tail", dockerLogFrame(1,"x"), 201},
+ } {
+  t.Run(tc.name, func(t *testing.T) {
+   runtime := dockerTestRuntime(func(request *http.Request) (*http.Response,error) {
+    switch request.URL.Path {
+    case "/"+dockerAPIVersion+"/containers/json":
+     return dockerTestResponse(http.StatusOK,fmt.Sprintf(`[{"Id":%q,"Labels":{"%s":"server-console"}}]`,dockerTestContainerID,dockerServerLabel)),nil
+    case "/"+dockerAPIVersion+"/containers/"+dockerTestContainerID+"/json":
+     return dockerTestResponse(http.StatusOK,fmt.Sprintf(`{"Config":{"Labels":{"%s":"server-console"}},"State":{"Running":true}}`,dockerServerLabel)),nil
+    case "/"+dockerAPIVersion+"/containers/"+dockerTestContainerID+"/logs":
+     return &http.Response{StatusCode:http.StatusOK,Header:make(http.Header),Body:io.NopCloser(strings.NewReader(string(tc.data)))},nil
+    default: return nil,fmt.Errorf("unexpected Docker request")
+    }
+   })
+   _, err := runtime.readServerConsole(context.Background(),"server-console",tc.tail)
+   if err == nil { t.Fatal("unsafe console data or tail limit was accepted") }
+  })
+ }
+}
 
 func TestDockerRuntimeStartsOnlyContainerBoundToServerLabel(t *testing.T) {
 	running := false
