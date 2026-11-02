@@ -100,7 +100,7 @@ describe("agent reconciliation route database integration", () => {
       data: {
         ownerId: user.id,
         nodeId: node.id,
-        name: "integration-server",
+        name: "integration-server",\n        status: "UNKNOWN",
         software: "PAPER",
         version: "1.21.1",
         memoryMb: 2048,
@@ -112,7 +112,7 @@ describe("agent reconciliation route database integration", () => {
       data: {
         serverId: server.id,
         actorUserId: user.id,
-        type: "START",
+        type: "PROVISION_SERVER",
         status: "FAILED",
         idempotencyKey: `integration-${randomBytes(12).toString("hex")}`,
         payload: {},
