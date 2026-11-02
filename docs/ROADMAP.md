@@ -34,13 +34,13 @@
 - [x] Transactional per-node TCP port allocation with configurable ranges and uniqueness constraints
 - [x] Docker TCP port publication from transactional per-node allocations
 - [ ] Host firewall configuration and verification
-- [ ] WebSocket console with authorization and audit logging
+- [x] Bounded server console log tail via mTLS, immutable server/node labels, subuser permission checks and audited customer polling UI (WebSocket interactive input remains pending)
 - [ ] File manager with path confinement and upload limits
 - [ ] Backup, restore and scheduled retention
 
 ## Customer and admin experience
 - [x] Owner-managed server subusers with granular permissions and audited access revocation
-- [x] Customer server list view backed by server and entitlement APIs; detail view pending
+- [x] Customer server list and detail views backed by server APIs, including power controls, operation history and live log polling
 - [x] Admin node management UI (registration, mTLS check, activation, disable, token rotation, uncertain-job inspection)
 - [ ] Admin allocation, user and server management
 - [x] Database-backed plan catalogue and customer entitlement read APIs
