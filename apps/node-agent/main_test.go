@@ -17,6 +17,23 @@ func TestHealthHandler(t *testing.T) {
  if w.Code!=http.StatusOK { t.Fatalf("want 200, got %d",w.Code) }
 }
 
+
+func TestServerConsoleRequiresNodeBearerToken(t *testing.T) {
+ h := newHandler(config{NodeID:"node-test",AgentToken:testAgentToken})
+ w := httptest.NewRecorder()
+ h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/v1/servers/server-test/console", nil))
+ if w.Code != http.StatusUnauthorized { t.Fatalf("want 401, got %d", w.Code) }
+}
+
+func TestServerConsoleRejectsInvalidTailBeforeDockerAccess(t *testing.T) {
+ h := newHandler(config{NodeID:"node-test",AgentToken:testAgentToken})
+ r := httptest.NewRequest(http.MethodGet, "/v1/servers/server-test/console?tail=201", nil)
+ r.Header.Set("Authorization", "Bearer "+testAgentToken)
+ w := httptest.NewRecorder()
+ h.ServeHTTP(w, r)
+ if w.Code != http.StatusBadRequest { t.Fatalf("want 400, got %d: %s", w.Code, w.Body.String()) }
+}
+
 func TestNodeStatusRejectsMissingToken(t *testing.T) {
  h:=newHandler(config{NodeID:"node-test",AgentToken:testAgentToken})
  w:=httptest.NewRecorder(); h.ServeHTTP(w,httptest.NewRequest(http.MethodGet,"/v1/node/status",nil))
