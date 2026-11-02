@@ -5,6 +5,8 @@ import (
 	"encoding/binary"
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -55,6 +57,7 @@ type dockerContainerInspect struct {
 	State struct {
 		Running bool `json:"Running"`
 	} `json:"State"`
+	NetworkSettings struct { Networks map[string]struct { IPAddress string `json:"IPAddress"` } `json:"Networks"` } `json:"NetworkSettings"`
 }
 
 // newDockerRuntime connects only to a local Unix-domain Docker socket. The
@@ -248,7 +251,10 @@ func (d *dockerRuntime) provisionServer(ctx context.Context, job signedNodeJob) 
  listener, err := net.Listen("tcp", net.JoinHostPort("0.0.0.0", strconv.Itoa(payload.Port)))
  if err != nil { return nil, fmt.Errorf("allocated TCP port is already in use: %w", err) }; _ = listener.Close()
  if err := d.pullImage(ctx, payload.DockerImage); err != nil { return nil, err }
- request := dockerCreateRequest{Image: payload.DockerImage, Env: []string{"EULA=TRUE", "TYPE="+payload.Software, "VERSION="+payload.MinecraftVersion, "JAVA_VERSION="+strconv.Itoa(payload.JavaMajor), "MEMORY="+strconv.FormatInt(payload.MemoryMB*85/100,10)+"M", "SERVER_PORT=25565"}, ExposedPorts: map[string]map[string]any{"25565/tcp": {}}, Labels: map[string]string{dockerServerLabel:job.ServerID, dockerNodeLabel:job.NodeID, "com.vampirenodes.managed":"true"}}
+ var rconSecret [32]byte
+ if _, err := rand.Read(rconSecret[:]); err != nil { return nil, errors.New("unable to generate server console credential") }
+ rconPassword := base64.RawURLEncoding.EncodeToString(rconSecret[:])
+ request := dockerCreateRequest{Image: payload.DockerImage, Env: []string{"EULA=TRUE", "TYPE="+payload.Software, "VERSION="+payload.MinecraftVersion, "JAVA_VERSION="+strconv.Itoa(payload.JavaMajor), "MEMORY="+strconv.FormatInt(payload.MemoryMB*85/100,10)+"M", "SERVER_PORT=25565", "ENABLE_RCON=true", "RCON_PASSWORD="+rconPassword, "RCON_PORT=25575"}, ExposedPorts: map[string]map[string]any{"25565/tcp": {}}, Labels: map[string]string{dockerServerLabel:job.ServerID, dockerNodeLabel:job.NodeID, "com.vampirenodes.managed":"true"}}
  request.HostConfig.Memory = payload.MemoryMB * 1024 * 1024
  request.HostConfig.NanoCpus = payload.CPUPercent * 10_000_000
  request.HostConfig.StorageOpt = map[string]string{"size":strconv.FormatInt(payload.DiskMB,10)+"m"}
@@ -281,6 +287,7 @@ func (d *dockerRuntime) inspectProvisionedContainer(ctx context.Context, contain
  response,err:=d.request(ctx,http.MethodGet,"/containers/"+url.PathEscape(containerID)+"/json"); if err!=nil{return inspected,err}
  if err:=readDockerJSON(response,&inspected);err!=nil{return inspected,err}
  if inspected.Config.Labels[dockerServerLabel]!=serverID || inspected.Config.Labels[dockerNodeLabel]!=nodeID || inspected.Config.Labels["com.vampirenodes.managed"]!="true" { return inspected,errors.New("provisioned container ownership labels do not match") }
+ if dockerEnvValue(inspected.Config.Env,"ENABLE_RCON")!="true" || dockerEnvValue(inspected.Config.Env,"RCON_PASSWORD")=="" || dockerEnvValue(inspected.Config.Env,"RCON_PORT")!="25575" { return inspected, errors.New("Docker did not apply private console configuration") }
  if inspected.HostConfig.Memory!=payload.MemoryMB*1024*1024 || inspected.HostConfig.NanoCpus!=payload.CPUPercent*10_000_000 || inspected.HostConfig.StorageOpt["size"]!=strconv.FormatInt(payload.DiskMB,10)+"m" { return inspected,errors.New("Docker did not apply requested memory, CPU and disk limits") }
  binding:=inspected.HostConfig.PortBindings["25565/tcp"]; if len(binding)!=1 || binding[0].HostPort!=strconv.Itoa(payload.Port) { return inspected,errors.New("Docker did not apply reserved TCP port") }
  return inspected,nil
@@ -289,6 +296,73 @@ func (d *dockerRuntime) inspectProvisionedContainer(ctx context.Context, contain
 
 // readServerConsole returns a bounded, decoded Docker stdout/stderr tail. The
 // server is selected only by its immutable panel-issued label.
+
+func dockerEnvValue(values []string, key string) string {
+ prefix := key + "="
+ for _, value := range values { if strings.HasPrefix(value, prefix) { return strings.TrimPrefix(value, prefix) } }
+ return ""
+}
+
+func writeRCONPacket(writer io.Writer, id, packetType int32, body string) error {
+ length := 4 + 4 + len(body) + 2
+ if length > 8192 { return errors.New("RCON packet exceeds size limit") }
+ packet := make([]byte, 4+length)
+ binary.LittleEndian.PutUint32(packet[:4], uint32(length))
+ binary.LittleEndian.PutUint32(packet[4:8], uint32(id))
+ binary.LittleEndian.PutUint32(packet[8:12], uint32(packetType))
+ copy(packet[12:], body)
+ returnWrite := 12 + len(body)
+ packet[returnWrite], packet[returnWrite+1] = 0, 0
+ _, err := writer.Write(packet)
+ return err
+}
+
+func readRCONPacket(reader io.Reader) (int32, int32, string, error) {
+ var header [4]byte
+ if _, err := io.ReadFull(reader, header[:]); err != nil { return 0, 0, "", err }
+ length := int(binary.LittleEndian.Uint32(header[:]))
+ if length < 10 || length > 8192 { return 0, 0, "", errors.New("RCON response length is invalid") }
+ packet := make([]byte, length)
+ if _, err := io.ReadFull(reader, packet); err != nil { return 0, 0, "", err }
+ if packet[length-1] != 0 || packet[length-2] != 0 { return 0, 0, "", errors.New("RCON response terminator is invalid") }
+ return int32(binary.LittleEndian.Uint32(packet[:4])), int32(binary.LittleEndian.Uint32(packet[4:8])), string(packet[8:length-2]), nil
+}
+
+func (d *dockerRuntime) sendServerCommand(ctx context.Context, serverID, nodeID, command string) (string, error) {
+ if !serverIDPattern.MatchString(serverID) || !serverIDPattern.MatchString(nodeID) { return "", errors.New("server or node identity is invalid") }
+ command = strings.TrimSpace(command)
+ if command == "" || len(command) > 512 { return "", errors.New("console command must contain 1 to 512 bytes") }
+ for _, ch := range command { if ch == 0 || ch == '\n' || ch == '\r' || ch < 0x20 || ch == 0x7f { return "", errors.New("console command must be a single line without control characters") } }
+ containerID, err := d.resolveServerContainer(ctx, serverID)
+ if err != nil { return "", err }
+ inspected, err := d.inspectServerContainerDetails(ctx, containerID, serverID)
+ if err != nil { return "", err }
+ if inspected.Config.Labels[dockerNodeLabel] != nodeID { return "", errors.New("Docker container node label does not match the registered node") }
+ if !inspected.State.Running { return "", errors.New("server must be running to accept console commands") }
+ password := dockerEnvValue(inspected.Config.Env, "RCON_PASSWORD")
+ if password == "" || dockerEnvValue(inspected.Config.Env, "ENABLE_RCON") != "true" { return "", errors.New("private RCON is not configured for this server") }
+ var address string
+ for _, network := range inspected.NetworkSettings.Networks {
+  ip := net.ParseIP(network.IPAddress)
+  if ip != nil && ip.IsPrivate() { address = ip.String(); break }
+ }
+ if address == "" { return "", errors.New("server has no private Docker network address") }
+ conn, err := (&net.Dialer{Timeout: 3*time.Second}).DialContext(ctx, "tcp", net.JoinHostPort(address, "25575"))
+ if err != nil { return "", fmt.Errorf("connect to private server console: %w", err) }
+ defer conn.Close()
+ deadline := time.Now().Add(5*time.Second)
+ if ctxDeadline, ok := ctx.Deadline(); ok && ctxDeadline.Before(deadline) { deadline = ctxDeadline }
+ _ = conn.SetDeadline(deadline)
+ if err := writeRCONPacket(conn, 1, 3, password); err != nil { return "", errors.New("unable to authenticate to private server console") }
+ authID, _, _, err := readRCONPacket(conn)
+ if err != nil || authID == -1 || authID != 1 { return "", errors.New("private server console authentication failed") }
+ if err := writeRCONPacket(conn, 2, 2, command); err != nil { return "", errors.New("unable to send server console command") }
+ responseID, _, output, err := readRCONPacket(conn)
+ if err != nil || responseID != 2 { return "", errors.New("server console did not return a valid command response") }
+ if len(output) > 8*1024 { output = output[:8*1024] }
+ return output, nil
+}
+
 func (d *dockerRuntime) readServerConsole(ctx context.Context, serverID, nodeID string, tail int) (string, error) {
  if !serverIDPattern.MatchString(serverID) || !serverIDPattern.MatchString(nodeID) || tail < 1 || tail > 200 { return "", errors.New("console request is invalid") }
  containerID, err := d.resolveServerContainer(ctx, serverID)
