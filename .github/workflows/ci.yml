@@ -1,4 +1,8 @@
 name: CI
+
+concurrency:
+  group: vampire-dash-ci-${{ github.ref }}
+  cancel-in-progress: true
 on:
   push:
     branches: [main]
