@@ -36,12 +36,12 @@ export default function ServerDetailPage(){
   }catch(e){setCommandError(e instanceof Error?e.message:"Command execution failed");}
   finally{setCommandBusy(false);}
  }
- useEffect(()=>{if(id&&server?.status==="RUNNING"&&(server.access.permissions.viewConsole||server.access.permissions.consoleCommands))void loadConsole();},[id,server?.status,server?.access.permissions.viewConsole,loadConsole]);
+ useEffect(()=>{if(id&&server?.status==="RUNNING"&&(server.access.permissions.viewConsole||server.access.permissions.consoleCommands))void loadConsole();},[id,server?.status,server?.access.permissions.viewConsole,server?.access.permissions.consoleCommands,loadConsole]);
  useEffect(()=>{
   if(!consoleAuto||server?.status!=="RUNNING"||!(server.access.permissions.viewConsole||server.access.permissions.consoleCommands))return;
   const timer=window.setInterval(()=>{void loadConsole();},5000);
   return()=>window.clearInterval(timer);
- },[consoleAuto,server?.status,server?.access.permissions.viewConsole,loadConsole]);
+ },[consoleAuto,server?.status,server?.access.permissions.viewConsole,server?.access.permissions.consoleCommands,loadConsole]);
 
  async function queue(type:string,payload:Record<string,unknown>={}){setBusy(true);setError("");setNotice("");try{const result=await api<{execution:string}>(`/servers/${encodeURIComponent(id)}/operations`,{method:"POST",body:JSON.stringify({type,payload,idempotencyKey:crypto.randomUUID()})});setNotice(result.execution==="QUEUED_FOR_NODE_AGENT"?"Request saved in the node-agent queue. It runs only when the assigned node is enabled and its worker is configured.":"Request accepted.");await load();}catch(e){setError(e instanceof Error?e.message:"Unable to queue operation");}finally{setBusy(false);}}
  if(loading&&!server)return <main style={{background:"#09090d",color:"#fff",minHeight:"100vh",padding:32}}>Loading server…</main>;
