@@ -224,12 +224,14 @@ func newHandler(c config) http.Handler {
   var body struct { Command string `json:"command"` }
   if err := decoder.Decode(&body); err != nil { writeJSON(w, http.StatusBadRequest, map[string]string{"error":"invalid console command"}); return }
   if err := decoder.Decode(new(any)); err != io.EOF { writeJSON(w, http.StatusBadRequest, map[string]string{"error":"console request must contain one JSON object"}); return }
+  command, err := validateConsoleCommand(body.Command)
+  if err != nil { writeJSON(w, http.StatusBadRequest, map[string]string{"error":"invalid console command"}); return }
   socket := c.DockerSocket
   if socket == "" { socket = "/var/run/docker.sock" }
   docker, err := newDockerRuntime(socket)
   if err != nil { writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error":"Docker console is unavailable"}); return }
   ctx, cancel := context.WithTimeout(r.Context(), 7*time.Second); defer cancel()
-  output, err := docker.sendServerCommand(ctx, serverID, c.NodeID, body.Command)
+  output, err := docker.sendServerCommand(ctx, serverID, c.NodeID, command)
   if err != nil { writeJSON(w, http.StatusBadGateway, map[string]string{"error":"Unable to execute server console command"}); return }
   writeJSON(w, http.StatusOK, map[string]any{"nodeId":c.NodeID,"serverId":serverID,"output":output,"executedAt":time.Now().UTC()})
  })))
