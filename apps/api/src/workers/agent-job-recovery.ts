@@ -17,7 +17,7 @@ export async function recoverExpiredAgentJobs(now = new Date()): Promise<{ retri
 
     const expired = await tx.nodeAgentJob.findMany({
       where: { status: { in: ["LEASED", "ACKNOWLEDGED"] }, leaseExpiresAt: { lte: now } },
-      select: { id: true, operationId: true, attempts: true, maxAttempts: true, status: true },
+      select: { id: true, operationId: true, attempts: true, maxAttempts: true, status: true, operation: { select: { serverId: true, type: true } } },
       orderBy: { leaseExpiresAt: "asc" },
       take: 250,
     });
@@ -44,6 +44,20 @@ export async function recoverExpiredAgentJobs(now = new Date()): Promise<{ retri
             where: { id: job.operationId, status: { in: ["QUEUED", "RUNNING"] } },
             data: { status: "FAILED", errorCode: job.status === "ACKNOWLEDGED" ? "AGENT_JOB_LEASE_LOST" : "AGENT_JOB_EXHAUSTED", errorMessage: job.status === "ACKNOWLEDGED" ? "Acknowledged operation lost its agent lease; automatic replay was suppressed" : "Node agent did not acknowledge the job before its lease expired", finishedAt: now },
           });
+          // Keep the customer lifecycle in sync with terminal job recovery.
+          // An acknowledged lease may have performed a side effect before the
+          // agent disappeared, so mark the server UNKNOWN rather than guessing.
+          if (job.operation.type === "PROVISION_SERVER") {
+            await tx.minecraftServer.updateMany({
+              where: { id: job.operation.serverId },
+              data: { status: job.status === "ACKNOWLEDGED" ? "UNKNOWN" : "ERROR" },
+            });
+          } else if (job.status === "ACKNOWLEDGED") {
+            await tx.minecraftServer.updateMany({
+              where: { id: job.operation.serverId },
+              data: { status: "UNKNOWN" },
+            });
+          }
         }
       } else {
         const delay = calculateAgentJobRetryDelayMs(Math.max(1, job.attempts));
