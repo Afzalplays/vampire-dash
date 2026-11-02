@@ -31,7 +31,7 @@ export default function ServerDetailPage(){
   setCommandBusy(true);setCommandError("");
   try{
    const result=await api<{output:string;executedAt:string}>(`/servers/${encodeURIComponent(id)}/console`,{method:"POST",body:JSON.stringify({command})});
-   setConsoleOutput(current=>current+`\\n> ${command}\\n${result.output}\\n`);
+   setConsoleOutput(current=>current+`\n> ${command}\n${result.output}\n`);
    setConsoleCommand("");
   }catch(e){setCommandError(e instanceof Error?e.message:"Command execution failed");}
   finally{setCommandBusy(false);}
