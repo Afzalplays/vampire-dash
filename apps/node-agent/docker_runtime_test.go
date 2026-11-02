@@ -70,6 +70,26 @@ func TestDockerConsoleReadsOnlyLabelOwnedContainerAndDecodesLogs(t *testing.T) {
  if output != "2026-11-02T10:00:00Z [Server thread/INFO]: Done!\\n" { t.Fatalf("unexpected console output: %q", output) }
 }
 
+
+func TestDockerConsoleRejectsContainerOwnedByAnotherNode(t *testing.T) {
+ logsRequested := false
+ runtime := dockerTestRuntime(func(request *http.Request) (*http.Response,error) {
+  switch request.URL.Path {
+  case "/"+dockerAPIVersion+"/containers/json":
+   return dockerTestResponse(http.StatusOK,fmt.Sprintf(`[{"Id":%q,"Labels":{"%s":"server-console"}}]`,dockerTestContainerID,dockerServerLabel)),nil
+  case "/"+dockerAPIVersion+"/containers/"+dockerTestContainerID+"/json":
+   return dockerTestResponse(http.StatusOK,fmt.Sprintf(`{"Config":{"Labels":{"%s":"server-console","%s":"another-node"}},"State":{"Running":true}}`,dockerServerLabel,dockerNodeLabel)),nil
+  case "/"+dockerAPIVersion+"/containers/"+dockerTestContainerID+"/logs":
+   logsRequested=true
+   return dockerTestResponse(http.StatusOK,""),nil
+  default: return nil,fmt.Errorf("unexpected Docker request")
+  }
+ })
+ _,err:=runtime.readServerConsole(context.Background(),"server-console","node-console",20)
+ if err==nil||!strings.Contains(err.Error(),"node label") { t.Fatalf("expected node ownership rejection, got %v",err) }
+ if logsRequested { t.Fatal("logs must not be fetched for a container owned by another node") }
+}
+
 func TestDockerConsoleRejectsMalformedFramesAndUnsafeLimits(t *testing.T) {
  for _, tc := range []struct{name string; data []byte; tail int}{
   {"truncated header", []byte{1,0,0}, 10},
