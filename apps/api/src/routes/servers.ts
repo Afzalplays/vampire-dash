@@ -131,7 +131,7 @@ export const serverRoutes: FastifyPluginAsync = async (app) => {
         ownerId: true,
         subusers: {
           where: { userId: user.id },
-          select: { id: true, viewConsole: true, power: true, manageFiles: true, manageBackups: true, manageSettings: true },
+          select: { id: true, viewConsole: true, consoleCommands: true, power: true, manageFiles: true, manageBackups: true, manageSettings: true },
           take: 1,
         },
       },
@@ -140,9 +140,10 @@ export const serverRoutes: FastifyPluginAsync = async (app) => {
     return {
       servers: servers.map(({ ownerId, subusers, ...server }) => ({
         ...server,
-        access: ownerId === user.id ? { role: "OWNER", permissions: { viewConsole: true, power: true, manageFiles: true, manageBackups: true, manageSettings: true } } :
+        access: ownerId === user.id ? { role: "OWNER", permissions: { viewConsole: true, consoleCommands: true, power: true, manageFiles: true, manageBackups: true, manageSettings: true } } :
           { role: "SUBUSER", permissions: subusers[0] ? {
             viewConsole: subusers[0].viewConsole,
+            consoleCommands: subusers[0].consoleCommands,
             power: subusers[0].power,
             manageFiles: subusers[0].manageFiles,
             manageBackups: subusers[0].manageBackups,
@@ -167,7 +168,7 @@ export const serverRoutes: FastifyPluginAsync = async (app) => {
       },
     });
     if (!server) return reply.code(404).send({ error: "Server not found" });
-    if (server.ownerId !== user.id && !server.subusers[0]?.viewConsole) return reply.code(403).send({ error: "Console permission is required" });
+    if (server.ownerId !== user.id && !server.subusers[0]?.consoleCommands) return reply.code(403).send({ error: "Console command permission is required" });
     const node = server.node;
     if (!node || !node.enabled || node.healthStatus !== "ONLINE") return reply.code(503).send({ error: "Assigned node is offline or disabled" });
     if (!node.tokenCiphertext || !node.tokenNonce || !node.tokenAuthTag) return reply.code(503).send({ error: "Node credentials are unavailable" });
@@ -234,7 +235,7 @@ export const serverRoutes: FastifyPluginAsync = async (app) => {
         ownerId: true,
         subusers: {
           where: { userId: user.id },
-          select: { viewConsole: true, power: true, manageFiles: true, manageBackups: true, manageSettings: true },
+          select: { viewConsole: true, consoleCommands: true, power: true, manageFiles: true, manageBackups: true, manageSettings: true },
           take: 1,
         },
         _count: { select: { subusers: true, operations: true } },
