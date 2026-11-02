@@ -100,7 +100,8 @@ describe("agent reconciliation route database integration", () => {
       data: {
         ownerId: user.id,
         nodeId: node.id,
-        name: "integration-server",\n        status: "UNKNOWN",
+        name: "integration-server",
+        status: "UNKNOWN",
         software: "PAPER",
         version: "1.21.1",
         memoryMb: 2048,
