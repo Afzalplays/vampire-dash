@@ -271,6 +271,39 @@ func TestRCONPacketEncodingAndDecoding(t *testing.T) {
  if id != 7 || packetType != 2 || body != "say hello" { t.Fatalf("unexpected RCON packet: id=%d type=%d body=%q",id,packetType,body) }
 }
 
+
+func TestRCONCommandExchangeAuthenticatesAndReturnsOutput(t *testing.T) {
+ client, server := net.Pipe()
+ defer client.Close()
+ defer server.Close()
+ serverErr := make(chan error,1)
+ go func() {
+  id, packetType, password, err := readRCONPacket(server)
+  if err != nil { serverErr <- err; return }
+  if id != 1 || packetType != 3 || password != "test-private-password" { serverErr <- fmt.Errorf("invalid auth packet id=%d type=%d",id,packetType); return }
+  if err := writeRCONPacket(server,1,2,""); err != nil { serverErr <- err; return }
+  id, packetType, command, err := readRCONPacket(server)
+  if err != nil { serverErr <- err; return }
+  if id != 2 || packetType != 2 || command != "list" { serverErr <- fmt.Errorf("invalid command packet id=%d type=%d command=%q",id,packetType,command); return }
+  serverErr <- writeRCONPacket(server,2,0,"There are 2 players online")
+ }()
+ output,err:=executeRCON(client,"test-private-password","list")
+ if err!=nil { t.Fatal(err) }
+ if output!="There are 2 players online" { t.Fatalf("unexpected RCON output: %q",output) }
+ if err:=<-serverErr;err!=nil { t.Fatal(err) }
+}
+
+func TestRCONRejectsInvalidAuthenticationResponse(t *testing.T) {
+ client, server := net.Pipe()
+ defer client.Close()
+ defer server.Close()
+ go func() {
+  _,_,_,_ = readRCONPacket(server)
+  _ = writeRCONPacket(server,-1,2,"")
+ }()
+ if _,err:=executeRCON(client,"wrong-password","list");err==nil||!strings.Contains(err.Error(),"authentication failed") { t.Fatalf("expected auth failure, got %v",err) }
+}
+
 func TestConsoleCommandRejectsMultilineBeforeDockerAccess(t *testing.T) {
  calls := 0
  runtime := dockerTestRuntime(func(request *http.Request) (*http.Response,error) { calls++; return dockerTestResponse(http.StatusOK,"[]"),nil })
