@@ -168,7 +168,7 @@ export const serverRoutes: FastifyPluginAsync = async (app) => {
       },
     });
     if (!server) return reply.code(404).send({ error: "Server not found" });
-    if (server.ownerId !== user.id && !server.subusers[0]?.consoleCommands) return reply.code(403).send({ error: "Console command permission is required" });
+    if (server.ownerId !== user.id && !server.subusers[0]?.viewConsole) return reply.code(403).send({ error: "Console permission is required" });
     const node = server.node;
     if (!node || !node.enabled || node.healthStatus !== "ONLINE") return reply.code(503).send({ error: "Assigned node is offline or disabled" });
     if (!node.tokenCiphertext || !node.tokenNonce || !node.tokenAuthTag) return reply.code(503).send({ error: "Node credentials are unavailable" });
@@ -199,11 +199,11 @@ export const serverRoutes: FastifyPluginAsync = async (app) => {
       select: {
         id: true, ownerId: true,
         node: { select: { id: true, endpoint: true, enabled: true, healthStatus: true, tokenCiphertext: true, tokenNonce: true, tokenAuthTag: true } },
-        subusers: { where: { userId: user.id }, select: { viewConsole: true }, take: 1 },
+        subusers: { where: { userId: user.id }, select: { consoleCommands: true }, take: 1 },
       },
     });
     if (!server) return reply.code(404).send({ error: "Server not found" });
-    if (server.ownerId !== user.id && !server.subusers[0]?.viewConsole) return reply.code(403).send({ error: "Console permission is required" });
+    if (server.ownerId !== user.id && !server.subusers[0]?.consoleCommands) return reply.code(403).send({ error: "Console command permission is required" });
     const node = server.node;
     if (!node || !node.enabled || node.healthStatus !== "ONLINE") return reply.code(503).send({ error: "Assigned node is offline or disabled" });
     if (!node.tokenCiphertext || !node.tokenNonce || !node.tokenAuthTag) return reply.code(503).send({ error: "Node credentials are unavailable" });
