@@ -293,7 +293,9 @@ func (d *dockerRuntime) readServerConsole(ctx context.Context, serverID, nodeID 
  if !serverIDPattern.MatchString(serverID) || !serverIDPattern.MatchString(nodeID) || tail < 1 || tail > 200 { return "", errors.New("console request is invalid") }
  containerID, err := d.resolveServerContainer(ctx, serverID)
  if err != nil { return "", err }
- inspected, err := d.inspectServerContainerDetails(ctx, containerID, serverID)\n if err != nil { return "", err }\n if inspected.Config.Labels[dockerNodeLabel] != nodeID { return "", errors.New("Docker container node label does not match the registered node") }
+ inspected, err := d.inspectServerContainerDetails(ctx, containerID, serverID)
+ if err != nil { return "", err }
+ if inspected.Config.Labels[dockerNodeLabel] != nodeID { return "", errors.New("Docker container node label does not match the registered node") }
  query := url.Values{}
  query.Set("stdout", "1"); query.Set("stderr", "1"); query.Set("tail", strconv.Itoa(tail)); query.Set("timestamps", "1")
  response, err := d.request(ctx, http.MethodGet, "/containers/"+url.PathEscape(containerID)+"/logs?"+query.Encode())
