@@ -192,7 +192,7 @@ export const serverRoutes: FastifyPluginAsync = async (app) => {
     const user = await authenticate(request, reply);
     if (!user) return;
     const params = z.object({ serverId: z.string().min(1).max(128) }).safeParse(request.params);
-    const body = z.object({ command: z.string().trim().min(1).max(512).refine((value) => !/[\u0000-\u001f\u007f]/.test(value), "Command must be a single line") }).strict().safeParse(request.body);
+    const body = z.object({ command: z.string().trim().min(1).max(512).refine((value) => !/[\u0000-\u001f\u007f\u2028\u2029]/.test(value), "Command must be a single line") }).strict().safeParse(request.body);
     if (!params.success || !body.success) return reply.code(400).send({ error: "Invalid console command" });
     const server = await prisma.minecraftServer.findFirst({
       where: { id: params.data.serverId, OR: [{ ownerId: user.id }, { subusers: { some: { userId: user.id } } }] },
