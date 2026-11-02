@@ -34,7 +34,7 @@
 - [x] Transactional per-node TCP port allocation with configurable ranges and uniqueness constraints
 - [x] Docker TCP port publication from transactional per-node allocations
 - [ ] Host firewall configuration and verification
-- [x] Bounded server console log tail via mTLS, immutable server/node labels, subuser permission checks and audited customer polling UI (WebSocket interactive input remains pending)
+- [x] Bounded server log tail and private RCON command execution via mTLS, immutable server/node labels, subuser permission checks and audited customer console UI (WebSocket streaming remains pending)
 - [ ] File manager with path confinement and upload limits
 - [ ] Backup, restore and scheduled retention
 
