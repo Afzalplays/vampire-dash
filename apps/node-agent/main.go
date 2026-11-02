@@ -9,6 +9,7 @@ import (
  "encoding/json"
  "errors"
  "fmt"
+ "io"
  "log"
  "net"
  "net/http"
@@ -214,6 +215,25 @@ func newHandler(c config) http.Handler {
   if err != nil { writeJSON(w, http.StatusBadGateway, map[string]string{"error":"Unable to retrieve server console"}); return }
   writeJSON(w, http.StatusOK, map[string]any{"nodeId":c.NodeID,"serverId":serverID,"output":output,"sampledAt":time.Now().UTC()})
  })))
+ mux.Handle("POST /v1/servers/{serverID}/console", requireToken(c.AgentToken, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+  serverID := r.PathValue("serverID")
+  if !serverIDPattern.MatchString(serverID) { writeJSON(w, http.StatusBadRequest, map[string]string{"error":"invalid server identity"}); return }
+  r.Body = http.MaxBytesReader(w, r.Body, 2048)
+  decoder := json.NewDecoder(r.Body)
+  decoder.DisallowUnknownFields()
+  var body struct { Command string `json:"command"` }
+  if err := decoder.Decode(&body); err != nil { writeJSON(w, http.StatusBadRequest, map[string]string{"error":"invalid console command"}); return }
+  if err := decoder.Decode(new(any)); err != io.EOF { writeJSON(w, http.StatusBadRequest, map[string]string{"error":"console request must contain one JSON object"}); return }
+  socket := c.DockerSocket
+  if socket == "" { socket = "/var/run/docker.sock" }
+  docker, err := newDockerRuntime(socket)
+  if err != nil { writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error":"Docker console is unavailable"}); return }
+  ctx, cancel := context.WithTimeout(r.Context(), 7*time.Second); defer cancel()
+  output, err := docker.sendServerCommand(ctx, serverID, c.NodeID, body.Command)
+  if err != nil { writeJSON(w, http.StatusBadGateway, map[string]string{"error":"Unable to execute server console command"}); return }
+  writeJSON(w, http.StatusOK, map[string]any{"nodeId":c.NodeID,"serverId":serverID,"output":output,"executedAt":time.Now().UTC()})
+ })))
+
 
  return mux
 }
