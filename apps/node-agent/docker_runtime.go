@@ -190,22 +190,20 @@ func (d *dockerRuntime) resolveServerContainer(ctx context.Context, serverID str
 	return selected, nil
 }
 
+func (d *dockerRuntime) inspectServerContainerDetails(ctx context.Context, containerID, serverID string) (dockerContainerInspect, error) {
+ var inspected dockerContainerInspect
+ if !dockerContainerIDPattern.MatchString(containerID) { return inspected, errors.New("container identity is invalid") }
+ response, err := d.request(ctx, http.MethodGet, "/containers/"+url.PathEscape(containerID)+"/json")
+ if err != nil { return inspected, err }
+ if err := readDockerJSON(response, &inspected); err != nil { return inspected, err }
+ if inspected.Config.Labels[dockerServerLabel] != serverID { return inspected, errors.New("Docker container server label does not match the requested server") }
+ return inspected, nil
+}
+
 func (d *dockerRuntime) inspectServerContainer(ctx context.Context, containerID, serverID string) (bool, error) {
-	if !dockerContainerIDPattern.MatchString(containerID) {
-		return false, errors.New("container identity is invalid")
-	}
-	response, err := d.request(ctx, http.MethodGet, "/containers/"+url.PathEscape(containerID)+"/json")
-	if err != nil {
-		return false, err
-	}
-	var inspected dockerContainerInspect
-	if err := readDockerJSON(response, &inspected); err != nil {
-		return false, err
-	}
-	if inspected.Config.Labels[dockerServerLabel] != serverID {
-		return false, errors.New("Docker container server label does not match the requested server")
-	}
-	return inspected.State.Running, nil
+ inspected, err := d.inspectServerContainerDetails(ctx, containerID, serverID)
+ if err != nil { return false, err }
+ return inspected.State.Running, nil
 }
 
 type dockerProvisionPayload struct {
