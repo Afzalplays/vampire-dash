@@ -378,6 +378,7 @@ model MinecraftServerSubuser {
   serverId    String
   userId      String
   viewConsole Boolean @default(true)
+  consoleCommands Boolean @default(false)
   power       Boolean @default(false)
   manageFiles Boolean @default(false)
   manageBackups Boolean @default(false)
