@@ -6,6 +6,7 @@ import (
  "net/http/httptest"
  "os"
  "testing"
+ "strings"
  "time"
 )
 
@@ -23,6 +24,17 @@ func TestServerConsoleRequiresNodeBearerToken(t *testing.T) {
  w := httptest.NewRecorder()
  h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/v1/servers/server-test/console", nil))
  if w.Code != http.StatusUnauthorized { t.Fatalf("want 401, got %d", w.Code) }
+}
+
+
+func TestServerConsoleRejectsMultilineCommandBeforeDockerAccess(t *testing.T) {
+ h := newHandler(config{NodeID:"node-test",AgentToken:testAgentToken})
+ r := httptest.NewRequest(http.MethodPost, "/v1/servers/server-test/console", strings.NewReader(`{"command":"say hello\\nop @a"}`))
+ r.Header.Set("Authorization", "Bearer "+testAgentToken)
+ r.Header.Set("Content-Type", "application/json")
+ w := httptest.NewRecorder()
+ h.ServeHTTP(w, r)
+ if w.Code != http.StatusBadRequest { t.Fatalf("want 400, got %d: %s", w.Code, w.Body.String()) }
 }
 
 func TestServerConsoleRejectsInvalidTailBeforeDockerAccess(t *testing.T) {
