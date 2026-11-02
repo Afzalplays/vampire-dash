@@ -16,7 +16,7 @@ export interface NodeAgentMetrics {
   sampledAt: string;
 }
 
-function getJson<T>(url: URL, token: string, options: { ca: Buffer; cert: Buffer; key: Buffer }): Promise<T> {
+function getJson<T>(url: URL, token: string, options: { ca: Buffer; cert: Buffer; key: Buffer; timeoutMs?: number }): Promise<T> {
   return new Promise((resolve, reject) => {
     const req = httpsRequest(url, {
       method: "GET",
@@ -26,7 +26,7 @@ function getJson<T>(url: URL, token: string, options: { ca: Buffer; cert: Buffer
       key: options.key,
       rejectUnauthorized: true,
       servername: url.hostname,
-      timeout: env.NODE_AGENT_TIMEOUT_MS,
+      timeout: options.timeoutMs ?? env.NODE_AGENT_TIMEOUT_MS,
     }, (res) => {
       const chunks: Buffer[] = [];
       let size = 0;
@@ -125,7 +125,7 @@ export async function fetchNodeConsole(endpoint: string, encrypted: { ciphertext
   ]);
   const token = decryptNodeCredential(encrypted);
   const url = new URL(`/v1/servers/${encodeURIComponent(serverId)}/console?tail=${tail}`, base);
-  const result = await getJson<NodeAgentConsole>(url, token, { ca, cert, key });
+  const result = await getJson<NodeAgentConsole>(url, token, { ca, cert, key, timeoutMs: 12_000 });
   if (!result || typeof result.nodeId !== "string" || result.serverId !== serverId ||
       typeof result.output !== "string" || Buffer.byteLength(result.output, "utf8") > 48 * 1024 ||
       typeof result.sampledAt !== "string" || !Number.isFinite(Date.parse(result.sampledAt))) {
