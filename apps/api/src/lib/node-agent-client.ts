@@ -90,7 +90,7 @@ function postJson<T>(url: URL, token: string, body: unknown, options: { ca: Buff
 
 export async function sendNodeConsoleCommand(endpoint: string, encrypted: { ciphertext: string; nonce: string; authTag: string }, serverId: string, command: string): Promise<{ nodeId: string; serverId: string; output: string; executedAt: string }> {
   const normalized = command.trim();
-  if (!/^[A-Za-z0-9_-]{1,128}$/.test(serverId) || !normalized || Buffer.byteLength(normalized, "utf8") > 512 || /[\u0000-\u001f\u007f]/.test(normalized)) {
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(serverId) || !normalized || Buffer.byteLength(normalized, "utf8") > 512 || /[\u0000-\u001f\u007f\u2028\u2029]/.test(normalized)) {
     throw new Error("Invalid console command");
   }
   if (!env.NODE_AGENT_CA_FILE || !env.NODE_AGENT_CLIENT_CERT_FILE || !env.NODE_AGENT_CLIENT_KEY_FILE) {
