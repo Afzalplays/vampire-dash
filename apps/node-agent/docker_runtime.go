@@ -343,7 +343,7 @@ func (d *dockerRuntime) sendServerCommand(ctx context.Context, serverID, nodeID,
  if !serverIDPattern.MatchString(serverID) || !serverIDPattern.MatchString(nodeID) { return "", errors.New("server or node identity is invalid") }
  command = strings.TrimSpace(command)
  if command == "" || len(command) > 512 { return "", errors.New("console command must contain 1 to 512 bytes") }
- for _, ch := range command { if ch == 0 || ch == '\n' || ch == '\r' || ch < 0x20 || ch == 0x7f { return "", errors.New("console command must be a single line without control characters") } }
+ for _, ch := range command { if ch == 0 || ch == '\n' || ch == '\r' || ch == '\u2028' || ch == '\u2029' || ch < 0x20 || ch == 0x7f { return "", errors.New("console command must be a single line without control characters") } }
  containerID, err := d.resolveServerContainer(ctx, serverID)
  if err != nil { return "", err }
  inspected, err := d.inspectServerContainerDetails(ctx, containerID, serverID)
