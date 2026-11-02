@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { authenticate } from "../lib/authenticate.js";
-import { fetchNodeConsole } from "../lib/node-agent-client.js";
+import { fetchNodeConsole, sendNodeConsoleCommand } from "../lib/node-agent-client.js";
 
 const serverSelect = {
   id: true,
@@ -184,6 +184,41 @@ export const serverRoutes: FastifyPluginAsync = async (app) => {
     } catch (error) {
       request.log.warn({ err: error, serverId: server.id, nodeId: node.id }, "server console request failed");
       return reply.code(502).send({ error: "Unable to retrieve server console from the assigned node" });
+    }
+  });
+
+  app.post("/:serverId/console", { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } }, async (request, reply) => {
+    const user = await authenticate(request, reply);
+    if (!user) return;
+    const params = z.object({ serverId: z.string().min(1).max(128) }).safeParse(request.params);
+    const body = z.object({ command: z.string().trim().min(1).max(512).refine((value) => !/[\\u0000-\\u001f\\u007f]/.test(value), "Command must be a single line") }).strict().safeParse(request.body);
+    if (!params.success || !body.success) return reply.code(400).send({ error: "Invalid console command" });
+    const server = await prisma.minecraftServer.findFirst({
+      where: { id: params.data.serverId, OR: [{ ownerId: user.id }, { subusers: { some: { userId: user.id } } }] },
+      select: {
+        id: true, ownerId: true,
+        node: { select: { id: true, endpoint: true, enabled: true, healthStatus: true, tokenCiphertext: true, tokenNonce: true, tokenAuthTag: true } },
+        subusers: { where: { userId: user.id }, select: { viewConsole: true }, take: 1 },
+      },
+    });
+    if (!server) return reply.code(404).send({ error: "Server not found" });
+    if (server.ownerId !== user.id && !server.subusers[0]?.viewConsole) return reply.code(403).send({ error: "Console permission is required" });
+    const node = server.node;
+    if (!node || !node.enabled || node.healthStatus !== "ONLINE") return reply.code(503).send({ error: "Assigned node is offline or disabled" });
+    if (!node.tokenCiphertext || !node.tokenNonce || !node.tokenAuthTag) return reply.code(503).send({ error: "Node credentials are unavailable" });
+    try {
+      const result = await sendNodeConsoleCommand(node.endpoint, {
+        ciphertext: node.tokenCiphertext, nonce: node.tokenNonce, authTag: node.tokenAuthTag,
+      }, server.id, body.data.command);
+      if (result.nodeId !== node.id) return reply.code(502).send({ error: "Node identity verification failed" });
+      await prisma.auditLog.create({ data: {
+        actorUserId: user.id, action: "SERVER_CONSOLE_COMMAND", targetId: server.id,
+        details: `Executed a console command on server ${server.id}; commandBytes=${Buffer.byteLength(body.data.command, "utf8")}`,
+      } });
+      return { serverId: server.id, output: result.output, executedAt: result.executedAt };
+    } catch (error) {
+      request.log.warn({ err: error, serverId: server.id, nodeId: node.id }, "server console command failed");
+      return reply.code(502).send({ error: "Unable to execute console command on the assigned node" });
     }
   });
 
