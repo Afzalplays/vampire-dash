@@ -16,7 +16,7 @@ export interface NodeAgentMetrics {
   sampledAt: string;
 }
 
-function getJson<T>(url: URL, token: string, options: { ca: Buffer; cert: Buffer; key: Buffer }): Promise<T> {
+function getJson<T>(url: URL, token: string, options: { ca: Buffer; cert: Buffer; key: Buffer; timeoutMs?: number }): Promise<T> {
   return new Promise((resolve, reject) => {
     const req = httpsRequest(url, {
       method: "GET",
@@ -66,7 +66,7 @@ function postJson<T>(url: URL, token: string, body: unknown, options: { ca: Buff
       method: "POST",
       headers: { authorization: `Bearer ${token}`, accept: "application/json", "content-type": "application/json", "content-length": encoded.length },
       ca: options.ca, cert: options.cert, key: options.key, rejectUnauthorized: true,
-      servername: url.hostname, timeout: env.NODE_AGENT_TIMEOUT_MS,
+      servername: url.hostname, timeout: options.timeoutMs ?? env.NODE_AGENT_TIMEOUT_MS,
     }, (res) => {
       const chunks: Buffer[] = [];
       let size = 0;
@@ -101,7 +101,7 @@ export async function sendNodeConsoleCommand(endpoint: string, encrypted: { ciph
   const [ca, cert, key] = await Promise.all([readFile(env.NODE_AGENT_CA_FILE), readFile(env.NODE_AGENT_CLIENT_CERT_FILE), readFile(env.NODE_AGENT_CLIENT_KEY_FILE)]);
   const token = decryptNodeCredential(encrypted);
   const url = new URL(`/v1/servers/${encodeURIComponent(serverId)}/console`, base);
-  const result = await postJson<{ nodeId: string; serverId: string; output: string; executedAt: string }>(url, token, { command: normalized }, { ca, cert, key });
+  const result = await postJson<{ nodeId: string; serverId: string; output: string; executedAt: string }>(url, token, { command: normalized }, { ca, cert, key, timeoutMs: 10_000 });
   if (!result || typeof result.nodeId !== "string" || result.serverId !== serverId || typeof result.output !== "string" ||
       Buffer.byteLength(result.output, "utf8") > 8 * 1024 || typeof result.executedAt !== "string" || !Number.isFinite(Date.parse(result.executedAt))) {
     throw new Error("Node agent returned an invalid console command result");
