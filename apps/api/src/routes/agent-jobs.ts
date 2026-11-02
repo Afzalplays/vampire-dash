@@ -302,7 +302,7 @@ export const agentJobRoutes: FastifyPluginAsync = async (app) => {
       });
       if (updatedOperation.count !== 1) throw new Error("Operation changed during reconciliation");
       if (job.operation.type === "PROVISION_SERVER") {
-        await tx.minecraftServer.updateMany({ where: { id: job.operation.serverId, nodeId: node.id, status: "PENDING" }, data: { status: terminal.status === "SUCCEEDED" ? "RUNNING" : "ERROR" } });
+        await tx.minecraftServer.updateMany({ where: { id: job.operation.serverId, nodeId: node.id, status: { in: ["PENDING", "UNKNOWN"] } }, data: { status: terminal.status === "SUCCEEDED" ? "RUNNING" : "ERROR" } });
       } else if (terminal.status === "SUCCEEDED" && ["START", "RESTART", "STOP"].includes(job.operation.type)) {
         await tx.minecraftServer.updateMany({ where: { id: job.operation.serverId, nodeId: node.id }, data: { status: job.operation.type === "STOP" ? "STOPPED" : "RUNNING" } });
       }
