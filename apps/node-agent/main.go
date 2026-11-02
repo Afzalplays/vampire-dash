@@ -210,7 +210,7 @@ func newHandler(c config) http.Handler {
   docker, err := newDockerRuntime(socket)
   if err != nil { writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error":"Docker console is unavailable"}); return }
   ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second); defer cancel()
-  output, err := docker.readServerConsole(ctx, serverID, tail)
+  output, err := docker.readServerConsole(ctx, serverID, c.NodeID, tail)
   if err != nil { writeJSON(w, http.StatusBadGateway, map[string]string{"error":"Unable to retrieve server console"}); return }
   writeJSON(w, http.StatusOK, map[string]any{"nodeId":c.NodeID,"serverId":serverID,"output":output,"sampledAt":time.Now().UTC()})
  })))
