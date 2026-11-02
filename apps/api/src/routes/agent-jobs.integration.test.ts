@@ -7,6 +7,7 @@ import { prisma } from "../lib/prisma.js";
 import { env } from "../env.js";
 import { nodeAgentTerminalResultHash, nodeOperationIdentityHash } from "../lib/agent-job-identity.js";
 import { agentJobRoutes } from "./agent-jobs.js";
+import { recoverExpiredAgentJobs } from "../workers/agent-job-recovery.js";
 
 const token = Buffer.from(randomBytes(32)).toString("base64url");
 const tokenHash = createHmac("sha256", env.SESSION_SECRET).update(token, "utf8").digest("hex");
@@ -24,6 +25,56 @@ after(async () => {
   await prisma.$disconnect();
 });
 
+
+
+describe("server lifecycle after expired agent leases", () => {
+  it("marks acknowledged provisioning UNKNOWN and exhausted unacknowledged provisioning ERROR", async () => {
+    const suffix = randomBytes(8).toString("hex");
+    const user = await prisma.user.create({ data: { email: `lifecycle-${suffix}@example.test`, username: `lifecycle_${suffix}`, passwordHash: "test-only-password-hash" } });
+    const node = await prisma.minecraftNode.create({ data: {
+      name: `lifecycle-node-${suffix}`, location: "ci", endpoint: `https://lifecycle-${suffix}.example.test`,
+      tokenHash: createHmac("sha256", env.SESSION_SECRET).update(randomBytes(32)).digest("hex"),
+      enabled: true, healthStatus: "ONLINE", memoryMb: 8192, diskMb: 81920,
+    } });
+    const acknowledgedServer = await prisma.minecraftServer.create({ data: {
+      ownerId: user.id, nodeId: node.id, name: "Acknowledged provision", software: "PAPER", version: "1.21.1",
+      memoryMb: 1024, diskMb: 2048, cpuPercent: 100, status: "PENDING",
+    } });
+    const exhaustedServer = await prisma.minecraftServer.create({ data: {
+      ownerId: user.id, nodeId: node.id, name: "Exhausted provision", software: "PAPER", version: "1.21.1",
+      memoryMb: 1024, diskMb: 2048, cpuPercent: 100, status: "PENDING",
+    } });
+    const acknowledgedOperation = await prisma.minecraftServerOperation.create({ data: {
+      serverId: acknowledgedServer.id, actorUserId: user.id, type: "PROVISION_SERVER", status: "RUNNING",
+      idempotencyKey: `lifecycle-ack-${suffix}`, payload: {},
+    } });
+    const exhaustedOperation = await prisma.minecraftServerOperation.create({ data: {
+      serverId: exhaustedServer.id, actorUserId: user.id, type: "PROVISION_SERVER", status: "QUEUED",
+      idempotencyKey: `lifecycle-exhausted-${suffix}`, payload: {},
+    } });
+    const expired = new Date(Date.now() - 60_000);
+    const acknowledgedJob = await prisma.nodeAgentJob.create({ data: {
+      operationId: acknowledgedOperation.id, nodeId: node.id, nonce: randomBytes(32).toString("hex"),
+      status: "ACKNOWLEDGED", attempts: 1, leaseTokenHash: randomBytes(32).toString("hex"), leaseExpiresAt: expired,
+    } });
+    const exhaustedJob = await prisma.nodeAgentJob.create({ data: {
+      operationId: exhaustedOperation.id, nodeId: node.id, nonce: randomBytes(32).toString("hex"),
+      status: "LEASED", attempts: 5, maxAttempts: 5, leaseTokenHash: randomBytes(32).toString("hex"), leaseExpiresAt: expired,
+    } });
+    try {
+      const recovered = await recoverExpiredAgentJobs(new Date());
+      assert.equal(recovered.dead >= 2, true);
+      assert.equal((await prisma.minecraftServer.findUniqueOrThrow({ where: { id: acknowledgedServer.id } })).status, "UNKNOWN");
+      assert.equal((await prisma.minecraftServer.findUniqueOrThrow({ where: { id: exhaustedServer.id } })).status, "ERROR");
+      assert.equal((await prisma.nodeAgentJob.findUniqueOrThrow({ where: { id: acknowledgedJob.id } })).status, "DEAD");
+      assert.equal((await prisma.nodeAgentJob.findUniqueOrThrow({ where: { id: exhaustedJob.id } })).status, "DEAD");
+    } finally {
+      await prisma.minecraftServer.deleteMany({ where: { id: { in: [acknowledgedServer.id, exhaustedServer.id] } } });
+      await prisma.minecraftNode.delete({ where: { id: node.id } });
+      await prisma.user.delete({ where: { id: user.id } });
+    }
+  });
+});
 
 describe("agent reconciliation route database integration", () => {
   it("accepts a matching pending result once and rejects identity conflicts", async () => {
