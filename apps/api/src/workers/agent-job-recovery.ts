@@ -4,13 +4,8 @@ const INTERVAL_MS = 15_000;
 const LOCK_NAMESPACE = 731_205;
 const LOCK_ID = 1;
 import { calculateAgentJobRetryDelayMs } from "./agent-job-retry.js";
+import { serverStatusAfterAgentJobFailure } from "./agent-job-lifecycle.js";
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-export function serverStatusAfterAgentJobFailure(operationType: string, jobStatus: string): "UNKNOWN" | "ERROR" | null {
-  if (operationType === "PROVISION_SERVER") return jobStatus === "ACKNOWLEDGED" ? "UNKNOWN" : "ERROR";
-  if (jobStatus === "ACKNOWLEDGED") return "UNKNOWN";
-  return null;
-}
 
 
 /**
