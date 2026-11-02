@@ -18,7 +18,7 @@ Email event templates are documented in [EMAIL-NOTIFICATIONS.md](EMAIL-NOTIFICAT
 
 ## Customer servers
 - `GET /servers` — list servers owned by the signed-in user or shared with them as a subuser.
-- `GET /servers/:serverId` — retrieve an authorized server detail, node health summary, access role, permissions and reserved TCP port.\n- `GET /servers/:serverId/console?tail=100` — fetch a bounded Docker stdout/stderr tail through the assigned node over mTLS. Requires owner access or subuser `viewConsole` permission; each read is audited and rate-limited.
+- `GET /servers/:serverId` — retrieve an authorized server detail, node health summary, access role, permissions and reserved TCP port.\n- `GET /servers/:serverId/console?tail=100` — fetch a bounded Docker stdout/stderr tail through the assigned node over mTLS.\n- `POST /servers/:serverId/console` — execute one bounded Minecraft command through a random per-server private RCON credential. Requires owner access or subuser `viewConsole` permission; commands and log reads are audited and rate-limited. RCON is not published on a host port.
 - `POST /servers` — create a server against an active entitlement and compatible enabled release; reserves RAM/disk/CPU capacity and a unique TCP port, then atomically queues a signed PROVISION_SERVER node job. Returns HTTP 202; the server is PENDING until the node reports successful container creation.
 
 Server responses never expose node-agent credentials or the node's private agent endpoint. Subusers only see servers shared with their account.
@@ -70,11 +70,11 @@ Operation requests and provisioning jobs are persisted and audited in the durabl
 - `PATCH /servers/:serverId/subusers/:subuserId` — owner-only update permissions.
 - `DELETE /servers/:serverId/subusers/:subuserId` — owner-only revoke access.
 
-Subusers cannot manage other subusers or change ownership. Power permission authorizes queued start/stop/restart requests; settings permission authorizes allowlisted property updates; console permission authorizes operation history viewing. File and backup permissions are stored for their future APIs. Free server owners can use subusers; these endpoints do not require a paid entitlement. All changes are audited.
+Subusers cannot manage other subusers or change ownership. Power permission authorizes queued start/stop/restart requests; settings permission authorizes allowlisted property updates; console permission authorizes log viewing and RCON commands. File and backup permissions are stored for their future APIs. Free server owners can use subusers; these endpoints do not require a paid entitlement. All changes are audited.
 
 
 ## Customer server detail UI
 - `/servers` — customer server list and entitlement-backed server creation form.
-- `/servers/:serverId` — server resource summary, reserved port, permission-aware power controls, audited auto-refreshing log console and recent operation history. Interactive WebSocket input and properties updates remain pending.
+- `/servers/:serverId` — server resource summary, reserved port, permission-aware power controls, audited auto-refreshing log console with private RCON command input and recent operation history. WebSocket streaming and properties updates remain pending.
 - `/admin/nodes` — node registration, health check, activation, disable, credential rotation and uncertain-job inspection.
 - `/admin/releases` — curated pinned Java Minecraft image release management.
