@@ -70,7 +70,7 @@ Operation requests and provisioning jobs are persisted and audited in the durabl
 - `PATCH /servers/:serverId/subusers/:subuserId` — owner-only update permissions.
 - `DELETE /servers/:serverId/subusers/:subuserId` — owner-only revoke access.
 
-Subusers cannot manage other subusers or change ownership. Power permission authorizes queued start/stop/restart requests; settings permission authorizes allowlisted property updates; `viewConsole` authorizes log viewing; `consoleCommands` separately authorizes RCON commands. File and backup permissions are stored for their future APIs. Free server owners can use subusers; these endpoints do not require a paid entitlement. All changes are audited.
+Subusers cannot manage other subusers or change ownership. Power permission authorizes queued start/stop/restart requests; settings permission authorizes allowlisted property updates; `viewConsole` authorizes read-only log viewing; `consoleCommands` authorizes RCON commands and also grants log viewing. File and backup permissions are stored for their future APIs. Free server owners can use subusers; these endpoints do not require a paid entitlement. All changes are audited.
 
 
 ## Customer server detail UI
