@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { calculateAgentJobRetryDelayMs } from "./agent-job-retry.js";
+import { serverStatusAfterAgentJobFailure } from "./agent-job-recovery.js";
 import { nodeAgentTerminalResultHash, nodeOperationIdentityHash } from "../lib/agent-job-identity.js";
 
 describe("agent job retry backoff", () => {
@@ -38,5 +39,23 @@ describe("node-agent reconciliation hashes", () => {
       result: { motd: "hello<&" },
     });
     assert.equal(hash, "da776a42514be63318a00037a51914df73355730d11a54bbb9dbb55a5e2a352e");
+  });
+});
+
+
+describe("server lifecycle after expired node leases", () => {
+  it("marks acknowledged provisioning UNKNOWN because creation may have happened", () => {
+    assert.equal(serverStatusAfterAgentJobFailure("PROVISION_SERVER", "ACKNOWLEDGED"), "UNKNOWN");
+  });
+  it("marks never-acknowledged provisioning ERROR", () => {
+    assert.equal(serverStatusAfterAgentJobFailure("PROVISION_SERVER", "LEASED"), "ERROR");
+  });
+  it("marks acknowledged power actions UNKNOWN", () => {
+    for (const action of ["START", "STOP", "RESTART"]) {
+      assert.equal(serverStatusAfterAgentJobFailure(action, "ACKNOWLEDGED"), "UNKNOWN");
+    }
+  });
+  it("does not change server status for an unacknowledged power action", () => {
+    assert.equal(serverStatusAfterAgentJobFailure("START", "LEASED"), null);
   });
 });
