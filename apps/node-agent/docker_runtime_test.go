@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"encoding/json"
+	"bytes"
 	"encoding/binary"
 	"net"
 	"strconv"
@@ -238,6 +239,7 @@ func TestDockerRuntimeProvisionsDigestPinnedContainerWithEnforcedLimitsAndPort(t
    var body map[string]any
    if err:=json.NewDecoder(request.Body).Decode(&body);err!=nil { t.Fatal(err) }
    if body["Image"]!=image { t.Fatalf("wrong image in create request: %#v",body["Image"]) }
+   envs:=body["Env"].([]any); envMap:=map[string]bool{}; for _,entry:=range envs { envMap[entry.(string)]=true }; if !envMap["ENABLE_RCON=true"] || !envMap["RCON_PORT=25575"] { t.Fatalf("private RCON configuration missing: %#v",envs) }; foundPassword:=false; for _,entry:=range envs { if strings.HasPrefix(entry.(string),"RCON_PASSWORD=") && len(strings.TrimPrefix(entry.(string),"RCON_PASSWORD="))>=40 { foundPassword=true } }; if !foundPassword { t.Fatalf("RCON password is missing or too short: %#v",envs) }
    labels:=body["Labels"].(map[string]any)
    if labels[dockerServerLabel]!="server-provision-123" || labels[dockerNodeLabel]!="node-123" { t.Fatalf("ownership labels missing: %#v",labels) }
    host:=body["HostConfig"].(map[string]any)
@@ -248,7 +250,7 @@ func TestDockerRuntimeProvisionsDigestPinnedContainerWithEnforcedLimitsAndPort(t
    return dockerTestResponse(http.StatusCreated,`{"Id":"`+dockerTestContainerID+`"}`),nil
   case request.Method==http.MethodGet && request.URL.Path=="/"+dockerAPIVersion+"/containers/"+dockerTestContainerID+"/json":
    state:="false";if running {state="true"}
-   return dockerTestResponse(http.StatusOK,fmt.Sprintf(`{"Config":{"Labels":{"%s":"server-provision-123","%s":"node-123","com.vampirenodes.managed":"true"}},"HostConfig":{"Memory":%d,"NanoCpus":%d,"StorageOpt":{"size":"2048m"},"PortBindings":{"25565/tcp":[{"HostIp":"0.0.0.0","HostPort":"%d"}]}},"State":{"Running":%s}}`,dockerServerLabel,dockerNodeLabel,int64(1024*1024*1024),int64(2_000_000_000),port,state)),nil
+   return dockerTestResponse(http.StatusOK,fmt.Sprintf(`{"Config":{"Labels":{"%s":"server-provision-123","%s":"node-123","com.vampirenodes.managed":"true"},"Env":["ENABLE_RCON=true","RCON_PASSWORD=0123456789012345678901234567890123456789","RCON_PORT=25575"]},"HostConfig":{"Memory":%d,"NanoCpus":%d,"StorageOpt":{"size":"2048m"},"PortBindings":{"25565/tcp":[{"HostIp":"0.0.0.0","HostPort":"%d"}]}},"State":{"Running":%s}}`,dockerServerLabel,dockerNodeLabel,int64(1024*1024*1024),int64(2_000_000_000),port,state)),nil
   case request.Method==http.MethodPost && request.URL.Path=="/"+dockerAPIVersion+"/containers/"+dockerTestContainerID+"/start":
    startSeen=true;running=true;return dockerTestResponse(http.StatusNoContent,""),nil
   default: t.Fatalf("unexpected Docker request: %s %s",request.Method,request.URL.RequestURI());return nil,fmt.Errorf("unexpected request")
@@ -258,6 +260,23 @@ func TestDockerRuntimeProvisionsDigestPinnedContainerWithEnforcedLimitsAndPort(t
  if err!=nil {t.Fatal(err)}
  if !pullSeen||!createSeen||!startSeen||!running {t.Fatalf("provisioning sequence incomplete: pull=%v create=%v start=%v running=%v",pullSeen,createSeen,startSeen,running)}
  if result["state"]!="RUNNING"||result["port"]!=port||result["diskLimitMb"]!=int64(2048) {t.Fatalf("unexpected provisioning result: %#v",result)}
+}
+
+
+func TestRCONPacketEncodingAndDecoding(t *testing.T) {
+ var encoded bytes.Buffer
+ if err := writeRCONPacket(&encoded, 7, 2, "say hello"); err != nil { t.Fatal(err) }
+ id, packetType, body, err := readRCONPacket(&encoded)
+ if err != nil { t.Fatal(err) }
+ if id != 7 || packetType != 2 || body != "say hello" { t.Fatalf("unexpected RCON packet: id=%d type=%d body=%q",id,packetType,body) }
+}
+
+func TestConsoleCommandRejectsMultilineBeforeDockerAccess(t *testing.T) {
+ calls := 0
+ runtime := dockerTestRuntime(func(request *http.Request) (*http.Response,error) { calls++; return dockerTestResponse(http.StatusOK,"[]"),nil })
+ _, err := runtime.sendServerCommand(context.Background(),"server-123","node-123","say hello\nop @a")
+ if err == nil || !strings.Contains(err.Error(),"single line") { t.Fatalf("expected multiline command rejection, got %v",err) }
+ if calls != 0 { t.Fatalf("invalid console command reached Docker, calls=%d",calls) }
 }
 
 func TestDockerRuntimeRejectsUnpinnedImageBeforeDockerAccess(t *testing.T) {
