@@ -30,7 +30,7 @@
 - [x] Typed Docker adapter for digest-pinned Java Minecraft provisioning, per-server labels, memory/CPU/disk limits and power operations (overlay2/XFS project quota required)
 - [x] Active lease renewal during long-running execution
 - [x] Signed PROVISION_SERVER/START/STOP/RESTART execution, lease renewal, durable result reconciliation (UPDATE_PROPERTIES pending)
-- [ ] Server lifecycle state machine and reconciliation worker
+- [x] Server status transitions for successful, failed and uncertain node-job outcomes, including recovery reconciliation\n- [ ] Periodic Docker-to-database lifecycle reconciliation and operator repair workflow
 - [x] Transactional per-node TCP port allocation with configurable ranges and uniqueness constraints
 - [x] Docker TCP port publication from transactional per-node allocations
 - [ ] Host firewall configuration and verification
