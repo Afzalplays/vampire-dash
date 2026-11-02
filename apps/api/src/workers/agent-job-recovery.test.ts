@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { calculateAgentJobRetryDelayMs } from "./agent-job-retry.js";
-import { serverStatusAfterAgentJobFailure } from "./agent-job-recovery.js";
+import { serverStatusAfterAgentJobFailure } from "./agent-job-lifecycle.js";
 import { nodeAgentTerminalResultHash, nodeOperationIdentityHash } from "../lib/agent-job-identity.js";
 
 describe("agent job retry backoff", () => {
