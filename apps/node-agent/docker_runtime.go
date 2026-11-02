@@ -291,11 +291,11 @@ func (d *dockerRuntime) inspectProvisionedContainer(ctx context.Context, contain
 
 // readServerConsole returns a bounded, decoded Docker stdout/stderr tail. The
 // server is selected only by its immutable panel-issued label.
-func (d *dockerRuntime) readServerConsole(ctx context.Context, serverID string, tail int) (string, error) {
- if !serverIDPattern.MatchString(serverID) || tail < 1 || tail > 200 { return "", errors.New("console request is invalid") }
+func (d *dockerRuntime) readServerConsole(ctx context.Context, serverID, nodeID string, tail int) (string, error) {
+ if !serverIDPattern.MatchString(serverID) || !serverIDPattern.MatchString(nodeID) || tail < 1 || tail > 200 { return "", errors.New("console request is invalid") }
  containerID, err := d.resolveServerContainer(ctx, serverID)
  if err != nil { return "", err }
- if _, err := d.inspectServerContainer(ctx, containerID, serverID); err != nil { return "", err }
+ inspected, err := d.inspectServerContainerDetails(ctx, containerID, serverID)\n if err != nil { return "", err }\n if inspected.Config.Labels[dockerNodeLabel] != nodeID { return "", errors.New("Docker container node label does not match the registered node") }
  query := url.Values{}
  query.Set("stdout", "1"); query.Set("stderr", "1"); query.Set("tail", strconv.Itoa(tail)); query.Set("timestamps", "1")
  response, err := d.request(ctx, http.MethodGet, "/containers/"+url.PathEscape(containerID)+"/logs?"+query.Encode())
