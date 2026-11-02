@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { authenticate } from "../lib/authenticate.js";
+import { fetchNodeConsole } from "../lib/node-agent-client.js";
 
 const serverSelect = {
   id: true,
@@ -149,6 +150,41 @@ export const serverRoutes: FastifyPluginAsync = async (app) => {
           } : null },
       })),
     };
+  });
+
+  app.get("/:serverId/console", { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } }, async (request, reply) => {
+    const user = await authenticate(request, reply);
+    if (!user) return;
+    const params = z.object({ serverId: z.string().min(1).max(128) }).safeParse(request.params);
+    const query = z.object({ tail: z.coerce.number().int().min(1).max(200).default(100) }).safeParse(request.query);
+    if (!params.success || !query.success) return reply.code(400).send({ error: "Invalid console request" });
+    const server = await prisma.minecraftServer.findFirst({
+      where: { id: params.data.serverId, OR: [{ ownerId: user.id }, { subusers: { some: { userId: user.id } } }] },
+      select: {
+        id: true, ownerId: true,
+        node: { select: { id: true, endpoint: true, enabled: true, healthStatus: true, tokenCiphertext: true, tokenNonce: true, tokenAuthTag: true } },
+        subusers: { where: { userId: user.id }, select: { viewConsole: true }, take: 1 },
+      },
+    });
+    if (!server) return reply.code(404).send({ error: "Server not found" });
+    if (server.ownerId !== user.id && !server.subusers[0]?.viewConsole) return reply.code(403).send({ error: "Console permission is required" });
+    const node = server.node;
+    if (!node || !node.enabled || node.healthStatus !== "ONLINE") return reply.code(503).send({ error: "Assigned node is offline or disabled" });
+    if (!node.tokenCiphertext || !node.tokenNonce || !node.tokenAuthTag) return reply.code(503).send({ error: "Node credentials are unavailable" });
+    try {
+      const consoleData = await fetchNodeConsole(node.endpoint, {
+        ciphertext: node.tokenCiphertext, nonce: node.tokenNonce, authTag: node.tokenAuthTag,
+      }, server.id, query.data.tail);
+      if (consoleData.nodeId !== node.id) return reply.code(502).send({ error: "Node identity verification failed" });
+      await prisma.auditLog.create({ data: {
+        actorUserId: user.id, action: "SERVER_CONSOLE_VIEWED", targetId: server.id,
+        details: `Viewed console output for server ${server.id}; tail=${query.data.tail}`,
+      } });
+      return { serverId: server.id, output: consoleData.output, sampledAt: consoleData.sampledAt };
+    } catch (error) {
+      request.log.warn({ err: error, serverId: server.id, nodeId: node.id }, "server console request failed");
+      return reply.code(502).send({ error: "Unable to retrieve server console from the assigned node" });
+    }
   });
 
   app.get("/:serverId", async (request, reply) => {
