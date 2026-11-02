@@ -15,7 +15,8 @@ export default function ServerDetailPage(){
  const params=useParams<{serverId:string}>();const id=params.serverId;
  const [server,setServer]=useState<Server|null>(null);const [ops,setOps]=useState<Operation[]>([]);
  const [loading,setLoading]=useState(true);const [error,setError]=useState("");const [notice,setNotice]=useState("");const [busy,setBusy]=useState(false);
- const [motd,setMotd]=useState("");const [difficulty,setDifficulty]=useState("normal");const [maxPlayers,setMaxPlayers]=useState("20");const [viewDistance,setViewDistance]=useState("10");\n const [consoleOutput,setConsoleOutput]=useState("");const [consoleError,setConsoleError]=useState("");const [consoleBusy,setConsoleBusy]=useState(false);const [consoleAuto,setConsoleAuto]=useState(true);
+ const [motd,setMotd]=useState("");const [difficulty,setDifficulty]=useState("normal");const [maxPlayers,setMaxPlayers]=useState("20");const [viewDistance,setViewDistance]=useState("10");
+ const [consoleOutput,setConsoleOutput]=useState("");const [consoleError,setConsoleError]=useState("");const [consoleBusy,setConsoleBusy]=useState(false);const [consoleAuto,setConsoleAuto]=useState(true);
  const load=useCallback(async()=>{setLoading(true);setError("");try{const [s,o]=await Promise.all([api<{server:Server}>(`/servers/${encodeURIComponent(id)}`),api<{operations:Operation[]}>(`/servers/${encodeURIComponent(id)}/operations`)]);setServer(s.server);setOps(o.operations);}catch(e){setError(e instanceof Error?e.message:"Unable to load server");}finally{setLoading(false);}},[id]);
  useEffect(()=>{if(id)void load();},[id,load]); 
  const loadConsole=useCallback(async()=>{
