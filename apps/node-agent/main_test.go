@@ -29,7 +29,7 @@ func TestServerConsoleRequiresNodeBearerToken(t *testing.T) {
 
 func TestServerConsoleRejectsMultilineCommandBeforeDockerAccess(t *testing.T) {
  h := newHandler(config{NodeID:"node-test",AgentToken:testAgentToken})
- r := httptest.NewRequest(http.MethodPost, "/v1/servers/server-test/console", strings.NewReader(`{"command":"say hello\\nop @a"}`))
+ r := httptest.NewRequest(http.MethodPost, "/v1/servers/server-test/console", strings.NewReader(`{"command":"say hello\nop @a"}`))
  r.Header.Set("Authorization", "Bearer "+testAgentToken)
  r.Header.Set("Content-Type", "application/json")
  w := httptest.NewRecorder()
