@@ -8,7 +8,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function pollNodes(): Promise<void> {
   await prisma.$transaction(async (tx) => {
-    const lock = await tx.$queryRaw<Array<{ locked: boolean }>>`SELECT pg_try_advisory_xact_lock(${LOCK_NAMESPACE}, ${LOCK_ID}) AS locked`;
+    const lock = await tx.$queryRaw<Array<{ locked: boolean }>>`SELECT pg_try_advisory_xact_lock(CAST(${LOCK_NAMESPACE} AS integer), CAST(${LOCK_ID} AS integer)) AS locked`;
     if (!lock[0]?.locked) {
       console.info("[node-health] another worker owns the polling lease; skipping this cycle");
       return;
