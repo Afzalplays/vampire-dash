@@ -16,7 +16,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  */
 export async function recoverExpiredAgentJobs(now = new Date()): Promise<{ retried: number; dead: number }> {
   return prisma.$transaction(async (tx) => {
-    const lock = await tx.$queryRaw<Array<{ locked: boolean }>>`SELECT pg_try_advisory_xact_lock(${LOCK_NAMESPACE}, ${LOCK_ID}) AS locked`;
+    const lock = await tx.$queryRaw<Array<{ locked: boolean }>>`SELECT pg_try_advisory_xact_lock(CAST(${LOCK_NAMESPACE} AS integer), CAST(${LOCK_ID} AS integer)) AS locked`;
     if (!lock[0]?.locked) return { retried: 0, dead: 0 };
 
     const expired = await tx.nodeAgentJob.findMany({
