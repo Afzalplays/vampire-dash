@@ -14,7 +14,7 @@ printf '\n'
 read -r -p "Panel API URL [https://dash.vampirenodes.in]: " PANEL_API_URL
 PANEL_API_URL="${PANEL_API_URL:-https://dash.vampirenodes.in}"
 read -r -p "Agent HTTPS listen address [0.0.0.0:8081]: " AGENT_LISTEN
-AGENT_LISTEN="${AGENT_LISTEN:-0.0.0.0:8081}"
+AGENT_LISTEN="${AGENT_LISTEN:-127.0.0.1:8081}"
 read -r -p "Agent TLS certificate path [/etc/vampire-node-agent/pki/agent.crt]: " AGENT_TLS_CERT
 AGENT_TLS_CERT="${AGENT_TLS_CERT:-/etc/vampire-node-agent/pki/agent.crt}"
 read -r -p "Agent TLS private key path [/etc/vampire-node-agent/pki/agent.key]: " AGENT_TLS_KEY
