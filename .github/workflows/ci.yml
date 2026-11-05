@@ -40,6 +40,7 @@ jobs:
       - run: npm run build:api
       - run: npm run test:agent-jobs
       - run: npm run build
+      - run: bash -n scripts/install-node-agent.sh public/install.sh
   node-agent:
     runs-on: ubuntu-latest
     steps:
