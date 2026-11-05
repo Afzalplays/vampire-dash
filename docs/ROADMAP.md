@@ -35,6 +35,7 @@
 - [x] Docker TCP port publication from transactional per-node allocations
 - [ ] Host firewall configuration and verification
 - [x] Bounded server log tail and private RCON command execution via mTLS, immutable server/node labels, subuser permission checks and audited customer console UI (WebSocket streaming remains pending)
+- [ ] Complete persistent storage: XFS project quotas, verified bind mounts, recovery and safe deletion (identity-bound directory/manifest groundwork added)
 - [ ] File manager with path confinement and upload limits
 - [ ] Backup, restore and scheduled retention
 
