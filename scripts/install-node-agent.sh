@@ -30,7 +30,7 @@ for file in "$AGENT_TLS_CERT" "$AGENT_TLS_KEY" "$AGENT_CLIENT_CA"; do
   [[ "$file" = /* && -f "$file" ]] || fail "Required PKI file does not exist or is not an absolute path: $file"
 done
 
-AGENT_LISTEN="${AGENT_LISTEN:-0.0.0.0:8081}"
+AGENT_LISTEN="${AGENT_LISTEN:-127.0.0.1:8081}"
 AGENT_DOCKER_SOCKET="${AGENT_DOCKER_SOCKET:-/run/docker.sock}"
 AGENT_DATA_DIR="${AGENT_DATA_DIR:-/var/lib/vampire-dash/agent}"
 AGENT_ENABLE_JOB_EXECUTION="${AGENT_ENABLE_JOB_EXECUTION:-false}"
@@ -38,6 +38,10 @@ AGENT_JOB_POLL_SECONDS="${AGENT_JOB_POLL_SECONDS:-5}"
 AGENT_LEASE_RENEW_SECONDS="${AGENT_LEASE_RENEW_SECONDS:-20}"
 VAMPIRE_DASH_REF="${VAMPIRE_DASH_REF:-main}"
 
+[[ "$AGENT_LISTEN" =~ ^([A-Za-z0-9.:-]+):([0-9]{1,5})$ ]] || fail "AGENT_LISTEN must be host:port."
+listen_port="${BASH_REMATCH[2]}"
+(( 10#$listen_port >= 1 && 10#$listen_port <= 65535 )) || fail "AGENT_LISTEN port must be between 1 and 65535."
+[[ "$AGENT_DOCKER_SOCKET" = /* ]] || fail "AGENT_DOCKER_SOCKET must be an absolute path."
 [[ "$AGENT_DATA_DIR" = /* && "$AGENT_DATA_DIR" != "/" ]] || fail "AGENT_DATA_DIR must be an explicit absolute non-root path."
 [[ "$AGENT_ENABLE_JOB_EXECUTION" = "true" || "$AGENT_ENABLE_JOB_EXECUTION" = "false" ]] || fail "AGENT_ENABLE_JOB_EXECUTION must be true or false."
 [[ "$AGENT_JOB_POLL_SECONDS" =~ ^([1-9]|[1-5][0-9]|60)$ ]] || fail "AGENT_JOB_POLL_SECONDS must be between 1 and 60."
