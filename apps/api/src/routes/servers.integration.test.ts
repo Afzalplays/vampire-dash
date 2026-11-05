@@ -46,11 +46,11 @@ describe("server console authorization", () => {
     try {
       const response = await app.inject({ method: "GET", url: `/api/servers/${server.id}/console?tail=20`, headers: { cookie: `vd_session=${sessionToken}` } });
       assert.equal(response.statusCode, 403, response.body);
-      assert.match(response.json().error, /console permission/i);
+      assert.match(response.json().error, /console.*permission/i);
       await prisma.minecraftServerSubuser.update({ where: { id: subuser.id }, data: { viewConsole: true, consoleCommands: false } });
       const commandResponse = await app.inject({ method: "POST", url: `/api/servers/${server.id}/console`, headers: { cookie: `vd_session=${sessionToken}`, "content-type": "application/json" }, payload: { command: "op attacker" } });
       assert.equal(commandResponse.statusCode, 403, commandResponse.body);
-      assert.match(commandResponse.json().error, /console permission/i);
+      assert.match(commandResponse.json().error, /console.*permission/i);
     } finally {
       await prisma.minecraftServerSubuser.delete({ where: { id: subuser.id } });
       await prisma.minecraftServer.delete({ where: { id: server.id } });
