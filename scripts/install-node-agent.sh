@@ -38,7 +38,7 @@ AGENT_JOB_POLL_SECONDS="${AGENT_JOB_POLL_SECONDS:-5}"
 AGENT_LEASE_RENEW_SECONDS="${AGENT_LEASE_RENEW_SECONDS:-20}"
 VAMPIRE_DASH_REF="${VAMPIRE_DASH_REF:-main}"
 
-[[ "$AGENT_LISTEN" =~ ^([A-Za-z0-9.\\[\\]:_-]+):([0-9]{1,5})$ ]] || fail "AGENT_LISTEN must be host:port."
+[[ "$AGENT_LISTEN" =~ ^([^[:space:]]+):([0-9]{1,5})$ ]] || fail "AGENT_LISTEN must be host:port."
 listen_port="${BASH_REMATCH[2]}"
 (( 10#$listen_port >= 1 && 10#$listen_port <= 65535 )) || fail "AGENT_LISTEN port must be between 1 and 65535."
 [[ "$AGENT_DOCKER_SOCKET" = /* ]] || fail "AGENT_DOCKER_SOCKET must be an absolute path."
